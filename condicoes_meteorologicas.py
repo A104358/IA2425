@@ -69,45 +69,39 @@ class GestorMeteorologico:
         self.atualizar_grafo()
 
     def gerar_nova_condicao(self, condicao_atual: CondicaoMeteorologica) -> CondicaoMeteorologica:
-        """Gera uma nova condição meteorológica baseada na atual"""
-        # Probabilidades de transição entre condições
+        """Gera uma nova condição meteorológica baseada na atual com probabilidades ajustadas"""
         probabilidades = {
             CondicaoMeteorologica.NORMAL: {
-                CondicaoMeteorologica.NORMAL: 0.7,
-                CondicaoMeteorologica.CHUVA_LEVE: 0.2,
-                CondicaoMeteorologica.NEVOEIRO: 0.1
+                CondicaoMeteorologica.NORMAL: 0.5,  # Reduzido de 0.7
+                CondicaoMeteorologica.CHUVA_LEVE: 0.3,  # Aumentado de 0.2
+                CondicaoMeteorologica.NEVOEIRO: 0.2  # Aumentado de 0.1
             },
             CondicaoMeteorologica.CHUVA_LEVE: {
-                CondicaoMeteorologica.NORMAL: 0.3,
-                CondicaoMeteorologica.CHUVA_LEVE: 0.4,
-                CondicaoMeteorologica.CHUVA_FORTE: 0.2,
-                CondicaoMeteorologica.NEVOEIRO: 0.1
+                CondicaoMeteorologica.NORMAL: 0.2,  # Reduzido de 0.3
+                CondicaoMeteorologica.CHUVA_LEVE: 0.3,  # Reduzido de 0.4
+                CondicaoMeteorologica.CHUVA_FORTE: 0.3,  # Aumentado de 0.2
+                CondicaoMeteorologica.NEVOEIRO: 0.2  # Aumentado de 0.1
             },
             CondicaoMeteorologica.CHUVA_FORTE: {
-                CondicaoMeteorologica.CHUVA_LEVE: 0.4,
+                CondicaoMeteorologica.CHUVA_LEVE: 0.3,  # Reduzido de 0.4
                 CondicaoMeteorologica.CHUVA_FORTE: 0.3,
-                CondicaoMeteorologica.TEMPESTADE: 0.3
-            },
-            CondicaoMeteorologica.NEVOEIRO: {
-                CondicaoMeteorologica.NORMAL: 0.4,
-                CondicaoMeteorologica.NEVOEIRO: 0.4,
-                CondicaoMeteorologica.CHUVA_LEVE: 0.2
+                CondicaoMeteorologica.TEMPESTADE: 0.4  # Aumentado de 0.3
             },
             CondicaoMeteorologica.TEMPESTADE: {
-                CondicaoMeteorologica.CHUVA_FORTE: 0.5,
-                CondicaoMeteorologica.TEMPESTADE: 0.3,
+                CondicaoMeteorologica.CHUVA_FORTE: 0.4,  # Reduzido de 0.5
+                CondicaoMeteorologica.TEMPESTADE: 0.4,  # Aumentado de 0.3
                 CondicaoMeteorologica.NORMAL: 0.2
-            },
-            CondicaoMeteorologica.NEVE: {
-                CondicaoMeteorologica.NORMAL: 0.3,
-                CondicaoMeteorologica.NEVE: 0.4,
-                CondicaoMeteorologica.CHUVA_LEVE: 0.3
+            },  
+            CondicaoMeteorologica.NEVOEIRO: { 
+                CondicaoMeteorologica.NEVOEIRO: 0.4,
+                CondicaoMeteorologica.NORMAL: 0.4,
+                CondicaoMeteorologica.CHUVA_LEVE: 0.2
             }
         }
-        
         opcoes = list(probabilidades[condicao_atual].keys())
         pesos = list(probabilidades[condicao_atual].values())
         return random.choices(opcoes, weights=pesos)[0]
+
 
     def atualizar_condicoes(self):
         """Atualiza as condições meteorológicas para cada região"""

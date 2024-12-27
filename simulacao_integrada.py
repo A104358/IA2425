@@ -6,17 +6,21 @@ from busca_emergencia import BuscaEmergencia
 from condicoes_meteorologicas import GestorMeteorologico, CondicaoMeteorologica
 from eventos_dinamicos import GestorEventos
 import time
+import random
 
 class SimulacaoEmergencia:
-    def __init__(self, num_pontos_entrega: int = 100):
-        # Inicialização existente
-        self.pdg = PortugalDistributionGraph()
-        self.grafo = self.pdg.criar_grafo_grande(num_pontos_entrega)
+    def __init__(self, grafo: nx.DiGraph):
+        """
+        Inicializa a simulação com um grafo já criado.
+        
+        Args:
+            grafo (nx.DiGraph): Grafo já configurado com os pontos de entrega
+        """
+        self.grafo = grafo
         self.gestor_meteo = GestorMeteorologico(self.grafo)
-        self.gestor_eventos = GestorEventos(self.grafo)  # Novo gestor
+        self.gestor_eventos = GestorEventos(self.grafo)
         self.busca = BuscaEmergencia(self.grafo, estado_inicial)
         
-        # Estatísticas atualizadas
         self.estatisticas = {
             'entregas_realizadas': 0,
             'entregas_falhas': 0,
@@ -27,8 +31,13 @@ class SimulacaoEmergencia:
             'falhas_por_evento': 0
         }
 
-    def executar_simulacao(self, num_ciclos: int = 1):
-        """Executa a simulação por um número específico de ciclos"""
+    def executar_simulacao(self, num_ciclos: int):
+        """
+        Executa a simulação por um número específico de ciclos.
+        
+        Args:
+            num_ciclos (int): Número de ciclos a serem executados
+        """
         print(f"Iniciando simulação com {num_ciclos} ciclos...")
         
         for ciclo in range(num_ciclos):
@@ -96,23 +105,20 @@ class SimulacaoEmergencia:
 
     def simular_entrega(self, veiculo: Dict, rota: List[str], custo_total: float, tempo_total: float) -> bool:
         """Simula a execução de uma entrega, considerando possíveis falhas"""
-        # Verificar autonomia considerando condições meteorológicas e eventos
         if custo_total > veiculo['autonomia']:
             print(f"Entrega falhou: autonomia insuficiente ({custo_total:.2f} > {veiculo['autonomia']})")
             self.estatisticas['falhas_por_obstaculo'] += 1
             return False
         
-        # Simular possíveis falhas baseadas em eventos dinâmicos
         for i in range(len(rota) - 1):
             edge = (rota[i], rota[i + 1])
             if edge in self.gestor_eventos.eventos:
-                chance_falha = 0.1  # Chance arbitrária de falha por evento
+                chance_falha = 0.1
                 if random.random() < chance_falha:
                     print(f"Entrega falhou devido a um evento dinâmico em {edge}")
                     self.estatisticas['falhas_por_evento'] += 1
                     return False
         
-        # Atualizar posição do veículo
         veiculo['localizacao'] = rota[-1]
         veiculo['combustivel'] -= custo_total
         
@@ -133,22 +139,33 @@ class SimulacaoEmergencia:
             tempo_medio = self.estatisticas['tempo_total'] / self.estatisticas['entregas_realizadas']
             print(f"Tempo médio por entrega: {tempo_medio:.2f} minutos")
         
-        taxa_sucesso = (self.estatisticas['entregas_realizadas'] / 
-                       (self.estatisticas['entregas_realizadas'] + 
-                        self.estatisticas['entregas_falhas'])) * 100
-        print(f"Taxa de sucesso: {taxa_sucesso:.2f}%")
+        total_entregas = (self.estatisticas['entregas_realizadas'] + 
+                         self.estatisticas['entregas_falhas'])
+        if total_entregas > 0:
+            taxa_sucesso = (self.estatisticas['entregas_realizadas'] / total_entregas) * 100
+            print(f"Taxa de sucesso: {taxa_sucesso:.2f}%")
 
 def main():
-    # Criar e executar simulação
-    simulacao = SimulacaoEmergencia(num_pontos_entrega=50)
+    # Configurações da simulação
+    NUM_PONTOS_ENTREGA = 50
+    NUM_CICLOS = 4
     
-    # Executar simulação por 5 ciclos
-    simulacao.executar_simulacao(num_ciclos=1)
+    # Criar grafo
+    print("Criando o grafo...")
+    pdg = PortugalDistributionGraph()
+    grafo = pdg.criar_grafo_grande(NUM_PONTOS_ENTREGA)
+    
+    print("\nInformações do grafo:")
+    print(f"Número de nós: {grafo.number_of_nodes()}")
+    print(f"Número de arestas: {grafo.number_of_edges()}")
+    
+    # Criar e executar simulação
+    simulacao = SimulacaoEmergencia(grafo)
+    simulacao.executar_simulacao(NUM_CICLOS)
     
     # Imprimir estatísticas finais
     simulacao.imprimir_estatisticas()
 
 if __name__ == "__main__":
-    import random
     random.seed(42)  # Para reprodutibilidade
     main()

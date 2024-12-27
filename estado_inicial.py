@@ -4,7 +4,7 @@ import networkx as nx
 # Definição do estado inicial adaptado para o novo formato de grafo
 estado_inicial = {
     "veiculos": [
-        {"id": 1, "tipo": "caminhão", "localizacao": "BASE_LISBOA", "capacidade": 500, "autonomia": 300, "combustivel": 300},
+        {"id": 1, "tipo": "camião", "localizacao": "BASE_LISBOA", "capacidade": 500, "autonomia": 300, "combustivel": 300},
         {"id": 2, "tipo": "drone", "localizacao": "BASE_LISBOA", "capacidade": 50, "autonomia": 50, "combustivel": 50},
         {"id": 3, "tipo": "helicóptero", "localizacao": "BASE_LISBOA", "capacidade": 200, "autonomia": 150, "combustivel": 150},
     ],
