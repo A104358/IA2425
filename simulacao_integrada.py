@@ -10,12 +10,6 @@ import random
 
 class SimulacaoEmergencia:
     def __init__(self, grafo: nx.DiGraph):
-        """
-        Inicializa a simulação com um grafo já criado.
-        
-        Args:
-            grafo (nx.DiGraph): Grafo já configurado com os pontos de entrega
-        """
         self.grafo = grafo
         self.gestor_meteo = GestorMeteorologico(self.grafo)
         self.gestor_eventos = GestorEventos(self.grafo)
@@ -34,23 +28,18 @@ class SimulacaoEmergencia:
         }
 
     def executar_simulacao(self, num_ciclos: int):
-        """
-        Executa a simulação por um número específico de ciclos.
-        
-        Args:
-            num_ciclos (int): Número de ciclos a serem executados
-        """
         print(f"Iniciando simulação com {num_ciclos} ciclos...")
         
         for ciclo in range(num_ciclos):
             print(f"\n=== Ciclo {ciclo + 1} ===")
             
-            # Atualizar condições meteorológicas
-            self.gestor_meteo.atualizar_condicoes()
-            self.gestor_meteo.imprimir_status()
+            # Atualizar condições meteorológicas com menor frequência
+            if ciclo % 5 == 0:  # Atualiza a cada 5 ciclos
+                self.gestor_meteo.atualizar_condicoes()
+                self.gestor_meteo.imprimir_status()
 
             # Gerar e atualizar eventos dinâmicos
-            self.gestor_eventos.gerar_eventos_aleatorios(prob_novo_evento=0.2)
+            self.gestor_eventos.gerar_eventos_aleatorios(prob_novo_evento=0.3)
             self.gestor_eventos.atualizar_eventos()
             self.gestor_eventos.aplicar_efeitos()
             self.gestor_eventos.imprimir_status()
@@ -63,51 +52,61 @@ class SimulacaoEmergencia:
                 regiao_atual = self.grafo.nodes[veiculo['localizacao']]['regiao']
                 condicao_atual = self.gestor_meteo.get_condicao_regiao(regiao_atual)
                 
-                if condicao_atual == CondicaoMeteorologica.TEMPESTADE:
-                    print(f"Veículo {veiculo['id']} não pode operar devido à tempestade!")
-                    self.estatisticas['falhas_por_clima'] += 1
-                    self.estatisticas['entregas_falhas'] += 1
-                    continue
+                # Permitir operação mesmo em tempestade com 60% de chance
+                if condicao_atual == CondicaoMeteorologica.TEMPESTADE and random.random() > 0.4:
+                    print(f"Veículo {veiculo['id']} operando em condições adversas!")
+                else:
+                    if condicao_atual == CondicaoMeteorologica.TEMPESTADE:
+                        print(f"Veículo {veiculo['id']} não pode operar devido à tempestade!")
+                        self.estatisticas['falhas_por_clima'] += 1
+                        self.estatisticas['entregas_falhas'] += 1
+                        continue
                 
-                # Buscar rota considerando condições atuais
+                # Buscar rota
                 rota = self.busca.busca_rota_prioritaria(veiculo['id'])
-                
                 if not rota:
                     print("Não foi possível encontrar uma rota válida")
                     self.estatisticas['rotas_bloqueadas'] += 1
                     continue
                 
-                # Verificar se a rota contém arestas bloqueadas
-                tem_bloqueio = any(
-                    self.grafo[rota[i]][rota[i+1]].get('bloqueado', False)
-                    for i in range(len(rota) - 1)
-                )
+                # Verificar bloqueios com alta chance de passagem
+                tem_bloqueio = False
+                for i in range(len(rota) - 1):
+                    if self.grafo[rota[i]][rota[i+1]].get('bloqueado', False):
+                        if random.random() > 0.2:  # 80% chance de conseguir passar
+                            continue
+                        tem_bloqueio = True
+                        break
+
                 if tem_bloqueio:
                     print("Rota contém trechos bloqueados, buscando alternativa...")
                     self.estatisticas['rotas_bloqueadas'] += 1
                     continue
                 
-                # Calcular métricas considerando condições meteorológicas, eventos e densidade populacional
+                # Calcular métricas com impactos reduzidos
                 impactos = self.gestor_eventos.get_impacto_total(rota)
+                # Reduzir o impacto total em 40%
+                impactos['impacto_custo'] = max(1.0, impactos['impacto_custo'] * 0.6)
+                impactos['impacto_tempo'] = max(1.0, impactos['impacto_tempo'] * 0.6)
+                
                 custo_total = sum(self.grafo[rota[i]][rota[i+1]]['custo'] for i in range(len(rota)-1)) * impactos['impacto_custo']
                 tempo_total = sum(self.grafo[rota[i]][rota[i+1]]['tempo'] for i in range(len(rota)-1)) * impactos['impacto_tempo']
                 
-                # Considerar densidade populacional
+                # Reduzir impacto da densidade populacional
                 densidade_pop = self.grafo.nodes[rota[-1]].get('densidade_populacional', 'normal')
                 if densidade_pop == 'alta':
-                    custo_total *= 0.9
-                    tempo_total *= 0.9
+                    custo_total *= 0.98
+                    tempo_total *= 0.98
                     self.estatisticas['impacto_populacao_alta'] += 1
                 elif densidade_pop == 'baixa':
-                    custo_total *= 1.1
-                    tempo_total *= 1.1
+                    custo_total *= 1.02
+                    tempo_total *= 1.02
                     self.estatisticas['impacto_populacao_baixa'] += 1
                 
                 print(f"Rota encontrada: {' -> '.join(rota)}")
                 print(f"Custo total: {custo_total:.2f}")
                 print(f"Tempo estimado: {tempo_total:.2f} minutos")
                 
-                # Simular a entrega
                 if self.simular_entrega(veiculo, rota, custo_total, tempo_total):
                     self.estatisticas['entregas_realizadas'] += 1
                     self.estatisticas['tempo_total'] += tempo_total
@@ -115,31 +114,33 @@ class SimulacaoEmergencia:
                     self.estatisticas['entregas_falhas'] += 1
 
     def simular_entrega(self, veiculo: Dict, rota: List[str], custo_total: float, tempo_total: float) -> bool:
-        """Simula a execução de uma entrega, considerando possíveis falhas"""
-        if custo_total > veiculo['autonomia']:
+        # Permitir exceder a autonomia em 50%
+        if custo_total > veiculo['autonomia'] * 1.5:
             print(f"Entrega falhou: autonomia insuficiente ({custo_total:.2f} > {veiculo['autonomia']})")
             self.estatisticas['falhas_por_obstaculo'] += 1
             return False
         
+        # Manter probabilidade significativa de falha por evento
         for i in range(len(rota) - 1):
             edge = (rota[i], rota[i + 1])
             if edge in self.gestor_eventos.eventos:
-                if random.random() < 0.1:
+                if random.random() < 0.25:  # 25% chance de falha
                     print(f"Entrega falhou devido a um evento dinâmico em {edge}")
                     self.estatisticas['falhas_por_evento'] += 1
                     return False
         
+        # Reabastecimento parcial após cada entrega bem-sucedida
         veiculo['localizacao'] = rota[-1]
-        veiculo['combustivel'] -= custo_total
+        veiculo['combustivel'] = max(veiculo['combustivel'] - custo_total * 0.7,  # Reduz o consumo em 30%
+                                   veiculo['autonomia'] * 0.3)  # Mantém pelo menos 30% da autonomia
         
         print(f"Entrega realizada com sucesso! Novo nível de combustível: {veiculo['combustivel']:.2f}")
         return True
 
     def imprimir_estatisticas(self):
-        """Imprime as estatísticas da simulação"""
         print("\n=== Estatísticas da Simulação ===")
         print(f"Entregas realizadas com sucesso: {self.estatisticas['entregas_realizadas']}")
-        print(f"Entregas falhas: {self.estatisticas['entregas_falhas']}")
+        print(f"Entregas falhadas: {self.estatisticas['entregas_falhas']}")
         print(f"Rotas bloqueadas: {self.estatisticas['rotas_bloqueadas']}")
         print(f"Falhas por clima: {self.estatisticas['falhas_por_clima']}")
         print(f"Falhas por obstáculos: {self.estatisticas['falhas_por_obstaculo']}")
@@ -159,8 +160,8 @@ class SimulacaoEmergencia:
 
 def main():
     # Configurações da simulação
-    NUM_PONTOS_ENTREGA = 5
-    NUM_CICLOS = 1
+    NUM_PONTOS_ENTREGA = 50
+    NUM_CICLOS = 15
     
     # Criar grafo
     print("Criando o grafo...")
