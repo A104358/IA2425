@@ -22,9 +22,13 @@ class TipoEvento(Enum):
 class GestorEventos:
     def __init__(self, grafo: nx.DiGraph):
         self.grafo = grafo
-        self.obstaculos = {}  # Readicionado
-        self.eventos = {}     # {(node1, node2): TipoEvento}
-        
+        self.obstaculos = {}
+        self.eventos = {}
+        self.multiplicadores_densidade = {
+            'alta': {'custo': 1.2, 'tempo': 1.1},
+            'normal': {'custo': 1.0, 'tempo': 1.0},
+            'baixa': {'custo': 0.9, 'tempo': 0.9}
+        }
         # Multiplicadores de impacto para obstáculos
         self.multiplicadores_obstaculos = {
             TipoObstaculo.CONSTRUCAO: {
@@ -170,22 +174,14 @@ class GestorEventos:
             else:  # evento
                 del self.eventos[item]
                 del self.contadores_tempo[item]
-
+    
     def aplicar_efeitos(self):
-        """Aplica os efeitos dos obstáculos e eventos ao grafo"""
-        if hasattr(self, 'valores_originais'):
-            for (u, v), valores in self.valores_originais.items():
-                self.grafo[u][v]['custo'] = valores['custo']
-                self.grafo[u][v]['tempo'] = valores['tempo']
-        else:
-            self.valores_originais = {
-                (u, v): {
-                    'custo': data['custo'],
-                    'tempo': data['tempo']
-                }
-                for u, v, data in self.grafo.edges(data=True)
-            }
-        
+        for node, tipo in self.obstaculos.items():
+            densidade = self.grafo.nodes[node].get('densidade_populacional', 'normal')
+            mult_densidade = self.multiplicadores_densidade[densidade]
+            for edge in self.grafo.edges(node):
+                self.grafo[edge[0]][edge[1]]['custo'] *= mult_densidade['custo']
+                self.grafo[edge[0]][edge[1]]['tempo'] *= mult_densidade['tempo']
         # Aplicar efeitos dos obstáculos
         for node, tipo in self.obstaculos.items():
             mult = self.multiplicadores_obstaculos[tipo]

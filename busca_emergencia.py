@@ -174,36 +174,6 @@ class BuscaEmergencia:
 
         return None
 
-    # [Resto dos métodos permanecem iguais...]
-    def busca_rota_prioritaria(self, veiculo_id: int) -> List[str]:
-        """Implementa a busca com o algoritmo escolhido dinamicamente."""
-        veiculo = next(v for v in self.estado["veiculos"] if v["id"] == veiculo_id)
-        inicio = veiculo["localizacao"]
-
-        # Encontrar pontos de entrega disponíveis
-        pontos_entrega = [n for n, d in self.grafo.nodes(data=True) 
-                         if d.get('tipo') == 'entrega']
-        
-        if not pontos_entrega:
-            print("Não há pontos de entrega disponíveis")
-            return None
-
-        # Usar o primeiro ponto de entrega como objetivo (pode ser melhorado)
-        objetivo = pontos_entrega[0]
-        
-        # Calcular heurística para o objetivo atual
-        heuristica = calcular_heuristica(self.grafo, objetivo)
-
-        # Executar o algoritmo escolhido
-        if self.algoritmo_escolhido == "Busca em Largura":
-            return busca_em_largura(self.grafo, inicio, objetivo)
-        elif self.algoritmo_escolhido == "Busca em Profundidade":
-            return busca_em_profundidade(self.grafo, inicio, objetivo)
-        elif self.algoritmo_escolhido == "Busca Gulosa":
-            return busca_gulosa(self.grafo, inicio, objetivo, heuristica)
-        else:  # A* como padrão
-            return busca_a_estrela(self.grafo, inicio, objetivo, heuristica)
-
     def calcular_score_emergencia(self, zona_id: str) -> float:
         """Calcula o score de emergência para uma zona."""
         zona = self.estado["zonas_afetadas"][zona_id]

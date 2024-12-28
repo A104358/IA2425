@@ -1,5 +1,7 @@
 import random
 import networkx as nx
+from eventos_dinamicos import TipoObstaculo
+from condicoes_meteorologicas import CondicaoMeteorologica, GestorMeteorologico
 
 # Definição do estado inicial adaptado para o novo formato de grafo
 estado_inicial = {
@@ -8,98 +10,85 @@ estado_inicial = {
         {"id": 2, "tipo": "drone", "localizacao": "BASE_LISBOA", "capacidade": 50, "autonomia": 50, "combustivel": 50},
         {"id": 3, "tipo": "helicóptero", "localizacao": "BASE_LISBOA", "capacidade": 200, "autonomia": 150, "combustivel": 150},
     ],
-    "zonas_afetadas": {},  # Será preenchido dinamicamente com pontos de entrega
-    "suprimentos": {"alimentos": 1000, "água": 500}
+    "zonas_afetadas": {},  # Será preenchido dinamicamente
+    "suprimentos": {
+        "alimentos": 1000,
+        "água": 500,
+        "medicamentos_básicos": 300,
+        "medicamentos_especializados": 150,
+        "kits_primeiros_socorros": 200
+    }
 }
 
-def teste_objetivo(estado):
-    """Verifica se todas as zonas prioritárias receberam suprimentos."""
-    for zona, dados in estado["zonas_afetadas"].items():
-        if not dados["suprida"]:
-            return False
-    return True
-
-def mover_veiculo(veiculo, destino, grafo):
-    """Adaptado para usar o novo formato de grafo."""
-    origem = veiculo["localizacao"]
-    if origem in grafo and destino in grafo:
-        try:
-            caminho = nx.shortest_path(grafo, origem, destino, weight='custo')
-            custo_total = sum(grafo[caminho[i]][caminho[i+1]]['custo'] 
-                            for i in range(len(caminho)-1))
-            
-            if veiculo["combustivel"] >= custo_total:
-                veiculo["localizacao"] = destino
-                veiculo["combustivel"] -= custo_total
-                return True
-        except nx.NetworkXNoPath:
-            pass
-    return False
-
-def carregar_suprimentos(veiculo, tipo, quantidade, estado):
-    """Mantido sem alterações pois não depende do formato do grafo."""
-    if quantidade <= estado["suprimentos"][tipo] and quantidade <= veiculo["capacidade"]:
-        estado["suprimentos"][tipo] -= quantidade
-        veiculo[tipo] = veiculo.get(tipo, 0) + quantidade
-        return True
-    return False
-
-def descarregar_suprimentos(veiculo, destino, estado):
-    """Adaptado para trabalhar com o novo formato de zonas afetadas."""
-    if destino in estado["zonas_afetadas"]:
-        zona = estado["zonas_afetadas"][destino]
-        for tipo, quantidade in veiculo.items():
-            if tipo in zona["necessidades"] and quantidade > 0:
-                entregue = min(zona["necessidades"][tipo], quantidade)
-                zona["necessidades"][tipo] -= entregue
-                veiculo[tipo] -= entregue
-                if all(n == 0 for n in zona["necessidades"].values()):
-                    zona["suprida"] = True
-        return True
-    return False
-
-def calcular_custo(estado, veiculo, acao, destino=None, grafo=None):
-    """Adaptado para usar o novo formato de grafo."""
-    custo = 0
-    if acao == "mover" and destino and grafo:
-        try:
-            caminho = nx.shortest_path(grafo, veiculo["localizacao"], destino, weight='custo')
-            custo = sum(grafo[caminho[i]][caminho[i+1]]['custo'] 
-                       for i in range(len(caminho)-1))
-        except nx.NetworkXNoPath:
-            return float('inf')
-    elif acao in ["carregar", "descarregar"]:
-        custo += 1
-    return custo
-
-def inicializar_zonas_afetadas(grafo):
-    """Inicializa zonas afetadas baseado nos pontos de entrega do grafo."""
+def inicializar_zonas_afetadas(grafo: nx.DiGraph):
+    """Inicializa zonas afetadas baseado nos eventos e obstáculos possíveis."""
     zonas = {}
+
     for node, data in grafo.nodes(data=True):
         if data['tipo'] == 'entrega':
-            zonas[node] = {
-                "necessidades": {"alimentos": random.randint(50, 200), "água": random.randint(25, 100)},
-                "populacao": random.randint(100, 1000),
-                "prioridade": random.randint(1, 5),
-                "suprida": False
+            densidade_populacional = data.get('densidade_populacional', 'normal')
+
+            necessidades = {
+                "alimentos": random.randint(50, 150),
+                "água": random.randint(30, 100),
+                "medicamentos_básicos": random.randint(20, 80),
+                "kits_primeiros_socorros": random.randint(10, 50)
             }
+
+            # Ajustar necessidades com base na densidade populacional
+            if densidade_populacional == 'alta':
+                for key in necessidades:
+                    necessidades[key] = int(necessidades[key] * 1.5)
+                populacao = random.randint(800, 1500)  # Alta densidade
+            elif densidade_populacional == 'baixa':
+                for key in necessidades:
+                    necessidades[key] = int(necessidades[key] * 0.8)
+                populacao = random.randint(100, 500)  # Baixa densidade
+            else:
+                populacao = random.randint(500, 800)  # Densidade normal
+
+            zonas[node] = {
+                "necessidades": necessidades,
+                "densidade_populacional": densidade_populacional,
+                "prioridade": random.randint(1, 5),
+                "suprida": False,
+                "populacao": populacao
+            }
+
     return zonas
+
+def exibir_estado_inicial(estado):
+    """Exibe o estado inicial formatado para melhor legibilidade."""
+    print("\n=== Estado Inicial ===")
+    print("\nVeículos:")
+    for veiculo in estado["veiculos"]:
+        print(f"- ID: {veiculo['id']} | Tipo: {veiculo['tipo']} | Localização: {veiculo['localizacao']} "
+              f"| Capacidade: {veiculo['capacidade']} | Autonomia: {veiculo['autonomia']} | Combustível: {veiculo['combustivel']}")
+
+    print("\nSuprimentos:")
+    for tipo, quantidade in estado["suprimentos"].items():
+        print(f"- {tipo.capitalize()}: {quantidade}")
+
+    print("\nZonas Afetadas:")
+    if estado["zonas_afetadas"]:
+        for zona, detalhes in estado["zonas_afetadas"].items():
+            print(f"- Zona: {zona}")
+            print(f"  Densidade populacional: {detalhes['densidade_populacional']}")
+            print(f"  Prioridade: {detalhes['prioridade']}")
+            print(f"  População: {detalhes['populacao']}")
+            print("  Necessidades:")
+            for tipo, qtd in detalhes["necessidades"].items():
+                print(f"    - {tipo.capitalize()}: {qtd}")
+            print(f"  Suprida: {'Sim' if detalhes['suprida'] else 'Não'}")
+    else:
+        print("- Nenhuma zona afetada registrada.")
 
 # Teste do estado inicial
 if __name__ == "__main__":
-    print("Estado inicial do problema:")
-    print("\nVeículos disponíveis:")
-    for veiculo in estado_inicial["veiculos"]:
-        print(veiculo)
-    
-    print("\nZonas afetadas:")
-    if estado_inicial["zonas_afetadas"]:
-        for zona, dados in estado_inicial["zonas_afetadas"].items():
-            print(f"Zona {zona}: {dados}")
-    else:
-        print("As zonas afetadas serão inicializadas quando o grafo for criado.")
-    
-    print("\nSuprimentos disponíveis:")
-    print(estado_inicial["suprimentos"])
-    
-    print("\nNota: O grafo de conexões é agora gerido pela classe PortugalDistributionGraph")
+    grafo_teste = nx.DiGraph()
+    grafo_teste.add_node("PE_1", tipo="entrega", densidade_populacional="alta")
+    grafo_teste.add_node("PE_2", tipo="entrega", densidade_populacional="baixa")
+    grafo_teste.add_node("PE_3", tipo="entrega", densidade_populacional="normal")
+
+    estado_inicial["zonas_afetadas"] = inicializar_zonas_afetadas(grafo_teste)
+    exibir_estado_inicial(estado_inicial)

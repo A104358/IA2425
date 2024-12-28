@@ -1,7 +1,9 @@
+import random
 import networkx as nx
 import matplotlib.pyplot as plt
-import random
 import math
+from eventos_dinamicos import TipoObstaculo
+from condicoes_meteorologicas import CondicaoMeteorologica, GestorMeteorologico
 
 class PortugalDistributionGraph:
     def __init__(self):
@@ -56,11 +58,13 @@ class PortugalDistributionGraph:
         for i in range(num_pontos_entrega):
             regiao = random.choice(list(self.regioes.keys()))
             coords = self.gerar_coordenadas_regiao(regiao)
+            densidade_populacional = random.choices(['alta', 'normal', 'baixa'], weights=[0.4, 0.4, 0.2])[0]
             node_id = f'PE_{i+1}'
             self.grafo.add_node(node_id,
                               tipo='entrega',
                               coordenadas=coords,
-                              regiao=regiao)
+                              regiao=regiao,
+                              densidade_populacional=densidade_populacional)
 
         self._criar_conexoes()
         return self.grafo
@@ -106,6 +110,13 @@ class PortugalDistributionGraph:
                 custo, tempo = self.calcular_custo_tempo(coord_pe, coord_hub)
                 self.grafo.add_edge(hub, pe, custo=custo, tempo=tempo)
                 self.grafo.add_edge(pe, hub, custo=custo, tempo=tempo)
+
+    def aplicar_obstaculos(self, obstaculos):
+        """Adiciona obstáculos ao grafo"""
+        for aresta, tipo_obstaculo in obstaculos.items():
+            if aresta in self.grafo.edges:
+                self.grafo.edges[aresta]['obstaculo'] = tipo_obstaculo
+                self.grafo.edges[aresta]['custo'] *= 2  # Exemplo: aumento de custo
 
     def visualizar_grafo(self, mostrar_labels=False):
         plt.figure(figsize=(15, 10))
@@ -156,12 +167,6 @@ def main():
     print(f"Número total de nodos: {grafo.number_of_nodes()}")
     print(f"Número total de arestas: {grafo.number_of_edges()}")
     print(f"Grau médio: {sum(dict(grafo.degree()).values())/grafo.number_of_nodes():.2f}")
-    
-    # Contar nodos por tipo
-    tipos = {}
-    for node in grafo.nodes(data=True):
-        tipo = node[1]['tipo']
-        tipos[tipo] = tipos.get(tipo, 0) + 1
     
     # Visualizar
     plt = pdg.visualizar_grafo(mostrar_labels=True)

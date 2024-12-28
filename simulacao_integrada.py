@@ -28,7 +28,9 @@ class SimulacaoEmergencia:
             'tempo_total': 0,
             'falhas_por_clima': 0,
             'falhas_por_obstaculo': 0,
-            'falhas_por_evento': 0
+            'falhas_por_evento': 0,
+            'impacto_populacao_alta': 0,
+            'impacto_populacao_baixa': 0
         }
 
     def executar_simulacao(self, num_ciclos: int):
@@ -76,21 +78,30 @@ class SimulacaoEmergencia:
                     continue
                 
                 # Verificar se a rota contém arestas bloqueadas
-                tem_bloqueio = False
-                for i in range(len(rota) - 1):
-                    if self.grafo[rota[i]][rota[i+1]].get('bloqueado', False):
-                        tem_bloqueio = True
-                        break
-                
+                tem_bloqueio = any(
+                    self.grafo[rota[i]][rota[i+1]].get('bloqueado', False)
+                    for i in range(len(rota) - 1)
+                )
                 if tem_bloqueio:
                     print("Rota contém trechos bloqueados, buscando alternativa...")
                     self.estatisticas['rotas_bloqueadas'] += 1
                     continue
                 
-                # Calcular métricas considerando condições meteorológicas e eventos
+                # Calcular métricas considerando condições meteorológicas, eventos e densidade populacional
                 impactos = self.gestor_eventos.get_impacto_total(rota)
                 custo_total = sum(self.grafo[rota[i]][rota[i+1]]['custo'] for i in range(len(rota)-1)) * impactos['impacto_custo']
                 tempo_total = sum(self.grafo[rota[i]][rota[i+1]]['tempo'] for i in range(len(rota)-1)) * impactos['impacto_tempo']
+                
+                # Considerar densidade populacional
+                densidade_pop = self.grafo.nodes[rota[-1]].get('densidade_populacional', 'normal')
+                if densidade_pop == 'alta':
+                    custo_total *= 0.9
+                    tempo_total *= 0.9
+                    self.estatisticas['impacto_populacao_alta'] += 1
+                elif densidade_pop == 'baixa':
+                    custo_total *= 1.1
+                    tempo_total *= 1.1
+                    self.estatisticas['impacto_populacao_baixa'] += 1
                 
                 print(f"Rota encontrada: {' -> '.join(rota)}")
                 print(f"Custo total: {custo_total:.2f}")
@@ -113,8 +124,7 @@ class SimulacaoEmergencia:
         for i in range(len(rota) - 1):
             edge = (rota[i], rota[i + 1])
             if edge in self.gestor_eventos.eventos:
-                chance_falha = 0.1
-                if random.random() < chance_falha:
+                if random.random() < 0.1:
                     print(f"Entrega falhou devido a um evento dinâmico em {edge}")
                     self.estatisticas['falhas_por_evento'] += 1
                     return False
@@ -134,6 +144,8 @@ class SimulacaoEmergencia:
         print(f"Falhas por clima: {self.estatisticas['falhas_por_clima']}")
         print(f"Falhas por obstáculos: {self.estatisticas['falhas_por_obstaculo']}")
         print(f"Falhas por eventos: {self.estatisticas['falhas_por_evento']}")
+        print(f"Impacto em áreas de alta densidade populacional: {self.estatisticas['impacto_populacao_alta']}")
+        print(f"Impacto em áreas de baixa densidade populacional: {self.estatisticas['impacto_populacao_baixa']}")
         
         if self.estatisticas['entregas_realizadas'] > 0:
             tempo_medio = self.estatisticas['tempo_total'] / self.estatisticas['entregas_realizadas']
@@ -147,8 +159,8 @@ class SimulacaoEmergencia:
 
 def main():
     # Configurações da simulação
-    NUM_PONTOS_ENTREGA = 50
-    NUM_CICLOS = 4
+    NUM_PONTOS_ENTREGA = 5
+    NUM_CICLOS = 1
     
     # Criar grafo
     print("Criando o grafo...")
@@ -167,5 +179,5 @@ def main():
     simulacao.imprimir_estatisticas()
 
 if __name__ == "__main__":
-    random.seed(42)  # Para reprodutibilidade
+    random.seed(42)
     main()
