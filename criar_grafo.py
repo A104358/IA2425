@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import math
 from eventos_dinamicos import TipoObstaculo
 from condicoes_meteorologicas import CondicaoMeteorologica, GestorMeteorologico
+from limitacoes_geograficas import TipoTerreno
+
 
 class PortugalDistributionGraph:
     def __init__(self):
@@ -50,10 +52,11 @@ class PortugalDistributionGraph:
             for cidade in cidades:
                 coords = self.gerar_coordenadas_regiao(regiao)
                 self.grafo.add_node(cidade,
-                                  tipo='hub',
-                                  coordenadas=coords,
-                                  regiao=regiao)
-
+                                tipo='hub',
+                                coordenadas=coords,
+                                regiao=regiao,
+                                tipo_terreno=random.choice(list(TipoTerreno))) 
+                
         # Adicionar pontos de entrega
         for i in range(num_pontos_entrega):
             regiao = random.choice(list(self.regioes.keys()))
@@ -61,11 +64,11 @@ class PortugalDistributionGraph:
             densidade_populacional = random.choices(['alta', 'normal', 'baixa'], weights=[0.4, 0.4, 0.2])[0]
             node_id = f'PE_{i+1}'
             self.grafo.add_node(node_id,
-                              tipo='entrega',
-                              coordenadas=coords,
-                              regiao=regiao,
-                              densidade_populacional=densidade_populacional)
-
+                          tipo='entrega',
+                          coordenadas=coords,
+                          regiao=regiao,
+                          densidade_populacional=densidade_populacional,
+                          tipo_terreno=random.choice(list(TipoTerreno)))  # Adicione esta linha
         self._criar_conexoes()
         return self.grafo
 

@@ -10,6 +10,8 @@ from algoritmos_busca import (
     busca_a_estrela,
     calcular_heuristica
 )
+from limitacoes_geograficas import TipoTerreno, RestricaoAcesso
+from janela_tempo import JanelaTempoZona
 import time
 
 class BuscaEmergencia:
@@ -17,7 +19,8 @@ class BuscaEmergencia:
         self.grafo = grafo
         self.estado = estado_inicial.copy()
         self.estado["zonas_afetadas"] = inicializar_zonas_afetadas(grafo)
-        
+        self.restricao_acesso = RestricaoAcesso()  # Inicializar restrições de acesso
+
         # Escolher dinamicamente o melhor algoritmo
         self.algoritmo_escolhido = self.escolher_melhor_algoritmo()
     
@@ -28,10 +31,8 @@ class BuscaEmergencia:
         - Tempo real da rota (baseado nos pesos das arestas)
         - Custo total da rota
         """
-        pontos_entrega = [n for n, d in self.grafo.nodes(data=True) 
-                         if d.get('tipo') == 'entrega']
-        bases = [n for n, d in self.grafo.nodes(data=True) 
-                if n.startswith('BASE_')]
+        pontos_entrega = [n for n, d in self.grafo.nodes(data=True) if d.get('tipo') == 'entrega']
+        bases = [n for n, d in self.grafo.nodes(data=True) if n.startswith('BASE_')]
         
         if not pontos_entrega or not bases:
             print("Erro: Não foram encontrados pontos suficientes no grafo")
@@ -125,8 +126,6 @@ class BuscaEmergencia:
             melhor_algoritmo = min(scores.items(), key=lambda x: x[1])
             print(f"\nMelhor algoritmo escolhido: {melhor_algoritmo[0]}")
             print(f"Score final: {melhor_algoritmo[1]:.4f}")
-            print(f"Rota: {' -> '.join(resultados[melhor_algoritmo[0]]['caminho'])}")
-            
             return melhor_algoritmo[0]
         else:
             print("Nenhum algoritmo encontrou um caminho válido")
@@ -137,10 +136,18 @@ class BuscaEmergencia:
         veiculo = next(v for v in self.estado["veiculos"] if v["id"] == veiculo_id)
         inicio = veiculo["localizacao"]
         
+        # Verificar restrições de terreno
+        if 'tipo_terreno' in self.grafo.nodes[inicio]:
+            tipo_terreno = self.grafo.nodes[inicio]['tipo_terreno']
+            if not self.restricao_acesso.pode_acessar(veiculo['tipo'], tipo_terreno):
+                print(f"Veículo {veiculo['id']} não pode acessar o terreno {tipo_terreno} em {inicio}")
+                return None
+
         # Ordenar zonas por score de emergência
         zonas_scores = [
             (zona_id, self.calcular_score_emergencia(zona_id))
             for zona_id in self.estado["zonas_afetadas"].keys()
+            if self.estado["zonas_afetadas"][zona_id]["janela_tempo"].esta_acessivel()  # Verificar janela de tempo
         ]
         zonas_scores.sort(key=lambda x: x[1], reverse=True)
         
@@ -153,7 +160,7 @@ class BuscaEmergencia:
             zona = self.estado["zonas_afetadas"][zona_id]
             if not self.verificar_capacidade_veiculo(veiculo, zona):
                 continue
-                
+
             # Calcular heurística apenas quando necessário
             if self.algoritmo_escolhido in ["Busca Gulosa", "A*"] and not heuristica:
                 heuristica = calcular_heuristica(self.grafo, zona_id)
@@ -181,10 +188,12 @@ class BuscaEmergencia:
             return 0
 
         necessidades_total = sum(zona["necessidades"].values())
+        criticidade = zona["janela_tempo"].criticidade  # Criticidade baseada no tempo restante
         score = (
             zona["prioridade"] * 2 +  # Peso maior para prioridade
             (zona["populacao"] / 1000) +  # Normalizado para população
-            (necessidades_total / 300)  # Normalizado para necessidades
+            (necessidades_total / 300) +  # Normalizado para necessidades
+            (criticidade * 2)  # Peso adicional para a criticidade
         )
         return score
 

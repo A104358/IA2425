@@ -2,27 +2,35 @@ import random
 import networkx as nx
 from eventos_dinamicos import TipoObstaculo
 from condicoes_meteorologicas import CondicaoMeteorologica, GestorMeteorologico
+from datetime import datetime, timedelta
+from janela_tempo import JanelaTempoZona
 
-# Definição do estado inicial adaptado para o novo formato de grafo
 estado_inicial = {
     "veiculos": [
-        {"id": 1, "tipo": "camião", "localizacao": "BASE_LISBOA", "capacidade": 500, "autonomia": 300, "combustivel": 300},
-        {"id": 2, "tipo": "drone", "localizacao": "BASE_LISBOA", "capacidade": 50, "autonomia": 50, "combustivel": 50},
-        {"id": 3, "tipo": "helicóptero", "localizacao": "BASE_LISBOA", "capacidade": 200, "autonomia": 150, "combustivel": 150},
+        {
+            "id": 1, 
+            "tipo": "camião", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 500, 
+            "volume_max": 1000,  # Adicione esta linha
+            "autonomia": 300, 
+            "combustivel": 300
+        },
+        # Atualize os outros veículos similarmente...
     ],
-    "zonas_afetadas": {},  # Será preenchido dinamicamente
     "suprimentos": {
-        "alimentos": 1000,
-        "água": 500,
-        "medicamentos_básicos": 300,
-        "medicamentos_especializados": 150,
-        "kits_primeiros_socorros": 200
+        "alimentos": {"peso": 1000, "volume": 2000},  # Modifique para incluir volume
+        "água": {"peso": 500, "volume": 500},
+        "medicamentos_básicos": {"peso": 300, "volume": 200},
+        "medicamentos_especializados": {"peso": 150, "volume": 100},
+        "kits_primeiros_socorros": {"peso": 200, "volume": 400}
     }
 }
 
 def inicializar_zonas_afetadas(grafo: nx.DiGraph):
     """Inicializa zonas afetadas baseado nos eventos e obstáculos possíveis."""
     zonas = {}
+    agora = datetime.now()
 
     for node, data in grafo.nodes(data=True):
         if data['tipo'] == 'entrega':
@@ -47,12 +55,17 @@ def inicializar_zonas_afetadas(grafo: nx.DiGraph):
             else:
                 populacao = random.randint(500, 800)  # Densidade normal
 
+            # Criar janela de tempo
+            duracao_horas = random.randint(6, 24)
+            janela_tempo = JanelaTempoZona(node, agora, duracao_horas)
+
             zonas[node] = {
                 "necessidades": necessidades,
                 "densidade_populacional": densidade_populacional,
                 "prioridade": random.randint(1, 5),
                 "suprida": False,
-                "populacao": populacao
+                "populacao": populacao,
+                "janela_tempo": janela_tempo
             }
 
     return zonas
@@ -79,9 +92,12 @@ def exibir_estado_inicial(estado):
             print("  Necessidades:")
             for tipo, qtd in detalhes["necessidades"].items():
                 print(f"    - {tipo.capitalize()}: {qtd}")
+            janela = detalhes['janela_tempo']
+            print(f"  Janela de tempo: {janela.inicio} a {janela.fim} (Criticidade: {janela.criticidade:.2f})")
             print(f"  Suprida: {'Sim' if detalhes['suprida'] else 'Não'}")
     else:
         print("- Nenhuma zona afetada registrada.")
+
 
 # Teste do estado inicial
 if __name__ == "__main__":
