@@ -197,6 +197,7 @@ class BuscaEmergencia:
         )
         return score
 
+
     def verificar_capacidade_veiculo(self, veiculo: Dict, zona: Dict) -> bool:
         """Verifica se o veículo tem capacidade para atender às necessidades da zona."""
         return veiculo["capacidade"] >= sum(zona["necessidades"].values())

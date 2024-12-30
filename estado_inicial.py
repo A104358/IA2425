@@ -12,14 +12,49 @@ estado_inicial = {
             "tipo": "camião", 
             "localizacao": "BASE_LISBOA", 
             "capacidade": 500, 
-            "volume_max": 1000,  # Adicione esta linha
+            "volume_max": 1000, 
             "autonomia": 300, 
             "combustivel": 300
         },
-        # Atualize os outros veículos similarmente...
+        {
+            "id": 2, 
+            "tipo": "drone", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 10, 
+            "volume_max": 20, 
+            "autonomia": 50, 
+            "combustivel": 50
+        },
+        {
+            "id": 3, 
+            "tipo": "helicóptero", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 200, 
+            "volume_max": 500, 
+            "autonomia": 400, 
+            "combustivel": 400
+        },
+        {
+            "id": 4, 
+            "tipo": "barco", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 800, 
+            "volume_max": 1500, 
+            "autonomia": 200, 
+            "combustivel": 200
+        },
+        {
+            "id": 5, 
+            "tipo": "camioneta", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 300, 
+            "volume_max": 600, 
+            "autonomia": 150, 
+            "combustivel": 150
+        }
     ],
     "suprimentos": {
-        "alimentos": {"peso": 1000, "volume": 2000},  # Modifique para incluir volume
+        "alimentos": {"peso": 1000, "volume": 2000},
         "água": {"peso": 500, "volume": 500},
         "medicamentos_básicos": {"peso": 300, "volume": 200},
         "medicamentos_especializados": {"peso": 150, "volume": 100},
@@ -28,14 +63,13 @@ estado_inicial = {
 }
 
 def inicializar_zonas_afetadas(grafo: nx.DiGraph):
-    """Inicializa zonas afetadas baseado nos eventos e obstáculos possíveis."""
+    """Inicializa zonas afetadas baseado no grafo."""
     zonas = {}
     agora = datetime.now()
 
     for node, data in grafo.nodes(data=True):
         if data['tipo'] == 'entrega':
             densidade_populacional = data.get('densidade_populacional', 'normal')
-
             necessidades = {
                 "alimentos": random.randint(50, 150),
                 "água": random.randint(30, 100),
@@ -43,32 +77,33 @@ def inicializar_zonas_afetadas(grafo: nx.DiGraph):
                 "kits_primeiros_socorros": random.randint(10, 50)
             }
 
-            # Ajustar necessidades com base na densidade populacional
             if densidade_populacional == 'alta':
                 for key in necessidades:
                     necessidades[key] = int(necessidades[key] * 1.5)
-                populacao = random.randint(800, 1500)  # Alta densidade
+                populacao = random.randint(800, 1500)
             elif densidade_populacional == 'baixa':
                 for key in necessidades:
                     necessidades[key] = int(necessidades[key] * 0.8)
-                populacao = random.randint(100, 500)  # Baixa densidade
+                populacao = random.randint(100, 500)
             else:
-                populacao = random.randint(500, 800)  # Densidade normal
+                populacao = random.randint(500, 800)
 
-            # Criar janela de tempo
-            duracao_horas = random.randint(6, 24)
-            janela_tempo = JanelaTempoZona(node, agora, duracao_horas)
+            # Criar janela de tempo com prioridade
+            duracao_horas = random.randint(4, 12)
+            prioridade = random.randint(1, 5)  # Adicionando prioridade
+            janela_tempo = JanelaTempoZona(node, agora, duracao_horas, prioridade)
 
             zonas[node] = {
                 "necessidades": necessidades,
                 "densidade_populacional": densidade_populacional,
-                "prioridade": random.randint(1, 5),
-                "suprida": False,
+                "prioridade": prioridade,
+                "janela_tempo": janela_tempo,
                 "populacao": populacao,
-                "janela_tempo": janela_tempo
+                "suprida": False
             }
 
     return zonas
+
 
 def exibir_estado_inicial(estado):
     """Exibe o estado inicial formatado para melhor legibilidade."""
