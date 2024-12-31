@@ -6,7 +6,6 @@ from eventos_dinamicos import TipoObstaculo
 from condicoes_meteorologicas import CondicaoMeteorologica, GestorMeteorologico
 from limitacoes_geograficas import TipoTerreno
 
-
 class PortugalDistributionGraph:
     def __init__(self):
         self.grafo = nx.DiGraph()
@@ -26,10 +25,27 @@ class PortugalDistributionGraph:
             'Algarve': ['Faro', 'Portimão', 'Albufeira', 'Lagos', 'Tavira', 'Loulé']
         }
 
+        # Adicionar postos de reabastecimento para cada região
+        self.postos_reabastecimento = {
+            'Norte': 'POSTO_NORTE',
+            'Centro': 'POSTO_CENTRO',
+            'Lisboa': 'POSTO_LISBOA',
+            'Alentejo': 'POSTO_ALENTEJO',
+            'Algarve': 'POSTO_ALGARVE'
+        }
+
     def gerar_coordenadas_regiao(self, regiao):
         bounds = self.regioes[regiao]
         lat = random.uniform(bounds['min_lat'], bounds['max_lat'])
         lon = random.uniform(bounds['min_lon'], bounds['max_lon'])
+        return (lat, lon)
+
+    def gerar_coordenadas_posto(self, regiao):
+        """Gera coordenadas para postos de reabastecimento ligeiramente deslocadas"""
+        bounds = self.regioes[regiao]
+        # Desloca o posto para a direita da região
+        lat = (bounds['min_lat'] + bounds['max_lat']) / 2
+        lon = bounds['max_lon'] + 0.2  # Desloca 0.2 graus para a direita
         return (lat, lon)
 
     def calcular_custo_tempo(self, coord1, coord2):
@@ -47,16 +63,24 @@ class PortugalDistributionGraph:
                            coordenadas=(38.7223, -9.1393),
                            regiao='Lisboa')
 
+        # Adicionar postos de reabastecimento
+        for regiao, posto_id in self.postos_reabastecimento.items():
+            coords = self.gerar_coordenadas_posto(regiao)
+            self.grafo.add_node(posto_id,
+                              tipo='posto',
+                              coordenadas=coords,
+                              regiao=regiao)
+
         # Adicionar principais cidades como hubs
         for regiao, cidades in self.cidades_principais.items():
             for cidade in cidades:
                 coords = self.gerar_coordenadas_regiao(regiao)
                 self.grafo.add_node(cidade,
-                                tipo='hub',
-                                coordenadas=coords,
-                                regiao=regiao,
-                                tipo_terreno=random.choice(list(TipoTerreno))) 
-                
+                                  tipo='hub',
+                                  coordenadas=coords,
+                                  regiao=regiao,
+                                  tipo_terreno=random.choice(list(TipoTerreno)))
+
         # Adicionar pontos de entrega
         for i in range(num_pontos_entrega):
             regiao = random.choice(list(self.regioes.keys()))
@@ -64,11 +88,12 @@ class PortugalDistributionGraph:
             densidade_populacional = random.choices(['alta', 'normal', 'baixa'], weights=[0.4, 0.4, 0.2])[0]
             node_id = f'PE_{i+1}'
             self.grafo.add_node(node_id,
-                          tipo='entrega',
-                          coordenadas=coords,
-                          regiao=regiao,
-                          densidade_populacional=densidade_populacional,
-                          tipo_terreno=random.choice(list(TipoTerreno)))  # Adicione esta linha
+                              tipo='entrega',
+                              coordenadas=coords,
+                              regiao=regiao,
+                              densidade_populacional=densidade_populacional,
+                              tipo_terreno=random.choice(list(TipoTerreno)))
+
         self._criar_conexoes()
         return self.grafo
 
@@ -88,6 +113,17 @@ class PortugalDistributionGraph:
         # Conectar hubs da mesma região
         for regiao in self.regioes:
             hubs_regiao = [n for n, d in nodes if d['tipo'] == 'hub' and d['regiao'] == regiao]
+            posto_regiao = self.postos_reabastecimento[regiao]
+            
+            # Conectar cada hub ao posto de reabastecimento da sua região
+            for hub in hubs_regiao:
+                coord_hub = self.grafo.nodes[hub]['coordenadas']
+                coord_posto = self.grafo.nodes[posto_regiao]['coordenadas']
+                custo, tempo = self.calcular_custo_tempo(coord_hub, coord_posto)
+                self.grafo.add_edge(hub, posto_regiao, custo=custo, tempo=tempo)
+                self.grafo.add_edge(posto_regiao, hub, custo=custo, tempo=tempo)
+            
+            # Conectar hubs entre si
             for hub1 in hubs_regiao:
                 for hub2 in hubs_regiao:
                     if hub1 != hub2:
@@ -114,13 +150,6 @@ class PortugalDistributionGraph:
                 self.grafo.add_edge(hub, pe, custo=custo, tempo=tempo)
                 self.grafo.add_edge(pe, hub, custo=custo, tempo=tempo)
 
-    def aplicar_obstaculos(self, obstaculos):
-        """Adiciona obstáculos ao grafo"""
-        for aresta, tipo_obstaculo in obstaculos.items():
-            if aresta in self.grafo.edges:
-                self.grafo.edges[aresta]['obstaculo'] = tipo_obstaculo
-                self.grafo.edges[aresta]['custo'] *= 2  # Exemplo: aumento de custo
-
     def visualizar_grafo(self, mostrar_labels=False):
         plt.figure(figsize=(15, 10))
         
@@ -132,6 +161,7 @@ class PortugalDistributionGraph:
         bases = [node for node, attr in self.grafo.nodes(data=True) if attr['tipo'] == 'base']
         hubs = [node for node, attr in self.grafo.nodes(data=True) if attr['tipo'] == 'hub']
         entregas = [node for node, attr in self.grafo.nodes(data=True) if attr['tipo'] == 'entrega']
+        postos = [node for node, attr in self.grafo.nodes(data=True) if attr['tipo'] == 'posto']
         
         # Desenhar arestas com menor opacidade e linhas mais finas
         nx.draw_networkx_edges(self.grafo, pos, alpha=0.1, edge_color='gray', width=0.5)
@@ -143,20 +173,17 @@ class PortugalDistributionGraph:
                              node_size=400, alpha=0.8, label='Hubs')
         nx.draw_networkx_nodes(self.grafo, pos, nodelist=entregas, node_color='lightgreen',
                              node_size=50, alpha=0.3, label='Pontos de Entrega')
+        nx.draw_networkx_nodes(self.grafo, pos, nodelist=postos, node_color='orange',
+                             node_size=600, alpha=0.9, label='Postos de Reabastecimento')
         
         if mostrar_labels:
-            # Mostrar labels apenas para base e hubs, com melhor posicionamento
-            labels = {node: node for node in bases + hubs}
+            # Mostrar labels para base, hubs e postos
+            labels = {node: node for node in bases + hubs + postos}
             nx.draw_networkx_labels(self.grafo, pos, labels, font_size=8, font_weight='bold')
         
         plt.title("Rede de Distribuição em Portugal", pad=20, fontsize=14, fontweight='bold')
-        
-        # Definir posição específica para a legenda para evitar o warning
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        
-        # Ajustar os limites do plot para acomodar a legenda
         plt.subplots_adjust(right=0.85)
-        
         plt.axis('off')
         return plt
 

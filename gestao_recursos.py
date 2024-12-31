@@ -70,7 +70,7 @@ class RecursosVeiculo:
         return (peso_utilizado + volume_utilizado) / 2
 
 
-class PlanejadorReabastecimento:
+class PlaneadorReabastecimento:
     def __init__(self, grafo: nx.DiGraph):
         self.grafo = grafo
         self.pontos_reabastecimento = self._identificar_pontos_reabastecimento()
