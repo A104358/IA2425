@@ -140,7 +140,7 @@ class BuscaEmergencia:
         if 'tipo_terreno' in self.grafo.nodes[inicio]:
             tipo_terreno = self.grafo.nodes[inicio]['tipo_terreno']
             if not self.restricao_acesso.pode_acessar(veiculo['tipo'], tipo_terreno):
-                print(f"Veículo {veiculo['id']} não pode acessar o terreno {tipo_terreno} em {inicio}")
+                print(f"Veículo {veiculo['id']} não pode aceder ao terreno {tipo_terreno} em {inicio}")
                 return None
 
         # Ordenar zonas por score de emergência

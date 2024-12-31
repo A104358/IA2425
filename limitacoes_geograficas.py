@@ -12,9 +12,11 @@ class TipoTerreno(Enum):
 class RestricaoAcesso:
     def __init__(self):
         self.restricoes_veiculo = {
-            "camião": {TipoTerreno.MONTANHOSO, TipoTerreno.FLORESTAL},
+            "camião": {TipoTerreno.MONTANHOSO, TipoTerreno.FLORESTAL, TipoTerreno.COSTEIRO},
+            "camioneta": {TipoTerreno.MONTANHOSO, TipoTerreno.FLORESTAL, TipoTerreno.COSTEIRO},
+            "barco": {TipoTerreno.URBANO, TipoTerreno.MONTANHOSO, TipoTerreno.FLORESTAL, TipoTerreno.RURAL},
             "drone": set(),  # Drones podem acessar todos os terrenos
-            "helicóptero": set()  # Helicópteros podem acessar todos os terrenos
+            "helicóptero": {TipoTerreno.COSTEIRO}  # Helicópteros não podem acessar terrenos costeiros
         }
     
     def pode_acessar(self, tipo_veiculo: str, tipo_terreno: TipoTerreno) -> bool:
