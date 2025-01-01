@@ -172,6 +172,10 @@ class GestorEventos:
             self.grafo[edge[0]][edge[1]]['tempo'] *= mult['tempo']
 
     def get_impacto_total(self, caminho: List[str]) -> Dict[str, float]:
+        """Calcula o impacto total de eventos dinâmicos ao longo de um caminho."""
+        if not caminho:
+            return {'impacto_custo': 1.0, 'impacto_tempo': 1.0}  # Sem impacto para caminhos inválidos ou vazios
+
         impacto_custo = 1.0
         impacto_tempo = 1.0
 

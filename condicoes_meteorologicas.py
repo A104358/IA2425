@@ -135,3 +135,17 @@ class GestorMeteorologico:
         print("\n=== Status Meteorológico ===")
         for regiao, condicao in self.condicoes_por_regiao.items():
             print(f"Região {regiao}: {condicao.value}")
+    
+    def verificar_condicoes_adversas(self, rota: List[str]) -> bool:
+        """Verifica se há condições meteorológicas adversas em qualquer ponto da rota."""
+        for node in rota:
+            regiao = self.grafo.nodes[node].get('regiao')
+            if not regiao:
+                continue  # Ignorar nós sem região definida
+            
+            condicao = self.condicoes_por_regiao.get(regiao, CondicaoMeteorologica.NORMAL)
+            if condicao in [CondicaoMeteorologica.CHUVA_FORTE, CondicaoMeteorologica.TEMPESTADE, CondicaoMeteorologica.NEVE]:
+                return True  # Condições adversas detectadas
+
+        return False  # Nenhuma condição adversa encontrada
+

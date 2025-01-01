@@ -68,24 +68,76 @@ class RecursosVeiculo:
         peso_utilizado = self.peso_atual / self.capacidade_peso if self.capacidade_peso > 0 else 0
         volume_utilizado = self.volume_atual / self.capacidade_volume if self.capacidade_volume > 0 else 0
         return (peso_utilizado + volume_utilizado) / 2
-
-
+    
 class PlaneadorReabastecimento:
     def __init__(self, grafo: nx.DiGraph):
         self.grafo = grafo
         self.pontos_reabastecimento = self._identificar_pontos_reabastecimento()
+        self.capacidade_maxima = 100  # Capacidade máxima de combustível
 
     def _identificar_pontos_reabastecimento(self) -> List[str]:
         """Identifica os nodos do grafo que servem como pontos de reabastecimento."""
-        pontos = []
-        for node, data in self.grafo.nodes(data=True):
-            if data.get('tipo') == 'reabastecimento':  # Ajuste conforme o modelo do grafo
-                pontos.append(node)
-        return pontos
+        return [node for node, data in self.grafo.nodes(data=True) 
+                if 'POSTO_' in str(node)]  # Mudança aqui para identificar postos corretamente
 
-    def calcular_proximo_reabastecimento(self, veiculo: Dict, rota: List[str]) -> str:
-        """Calcula o próximo ponto de reabastecimento baseado na rota."""
-        for node in rota:
-            if node in self.pontos_reabastecimento:
-                return node
-            return None
+    def _calcular_custo_rota(self, rota: List[str]) -> float:
+        """Calcula o custo total de uma rota."""
+        if not rota or len(rota) < 2:
+            return 0
+        return sum(self.grafo[rota[i]][rota[i + 1]]['custo'] 
+                  for i in range(len(rota) - 1))
+
+    def _encontrar_melhor_posto(self, localizacao: str, autonomia: float) -> Tuple[str, List[str]]:
+        """
+        Encontra o melhor posto de reabastecimento considerando distância e autonomia.
+        """
+        melhor_posto = None
+        melhor_rota = None
+        menor_custo = float('inf')
+
+        for posto in self.pontos_reabastecimento:
+            try:
+                # Usa Dijkstra para encontrar o caminho mais curto até o posto
+                rota = nx.shortest_path(self.grafo, localizacao, posto, weight='custo')
+                custo = self._calcular_custo_rota(rota)
+                
+                # Verifica se é possível chegar ao posto com a autonomia atual
+                if custo <= autonomia * 0.9 and custo < menor_custo:  # 90% da autonomia para margem de segurança
+                    melhor_posto = posto
+                    melhor_rota = rota
+                    menor_custo = custo
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+
+        return melhor_posto, melhor_rota
+
+    def calcular_proximo_reabastecimento(self, veiculo: Dict, rota_atual: List[str]) -> Tuple[bool, List[str]]:
+        """
+        Determina se e onde o veículo deve reabastecer.
+        """
+        combustivel_atual = veiculo['combustivel']
+        autonomia = veiculo['autonomia']
+        localizacao = veiculo['localizacao']
+        
+        # Ajuste no limite de reabastecimento para 30% da autonomia
+        limite_reabastecimento = autonomia * 0.3
+
+        if combustivel_atual <= limite_reabastecimento:
+            melhor_posto, rota_reabastecimento = self._encontrar_melhor_posto(
+                localizacao, combustivel_atual
+            )
+            
+            if melhor_posto and rota_reabastecimento:
+                return True, rota_reabastecimento
+                
+        return False, None
+
+    def executar_reabastecimento(self, veiculo: Dict) -> bool:
+        """
+        Executa o reabastecimento do veículo.
+        """
+        # Verifica se o veículo está em um posto de reabastecimento
+        if any(posto in veiculo['localizacao'] for posto in ['POSTO_']):
+            veiculo['combustivel'] = veiculo['autonomia']  # Reabastece até a autonomia máxima
+            return True
+        return False

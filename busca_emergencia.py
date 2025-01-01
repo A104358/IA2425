@@ -13,15 +13,15 @@ from algoritmos_busca import (
 from limitacoes_geograficas import TipoTerreno, RestricaoAcesso
 from janela_tempo import JanelaTempoZona
 import time
+from datetime import datetime, timedelta
+
 
 class BuscaEmergencia:
     def __init__(self, grafo: nx.DiGraph, estado_inicial: Dict):
         self.grafo = grafo
         self.estado = estado_inicial.copy()
         self.estado["zonas_afetadas"] = inicializar_zonas_afetadas(grafo)
-        self.restricao_acesso = RestricaoAcesso()  # Inicializar restrições de acesso
-
-        # Escolher dinamicamente o melhor algoritmo
+        self.restricao_acesso = RestricaoAcesso()
         self.algoritmo_escolhido = self.escolher_melhor_algoritmo()
     
     def escolher_melhor_algoritmo(self):
@@ -132,40 +132,33 @@ class BuscaEmergencia:
             return "A*"  # Algoritmo padrão em caso de falha
 
     def busca_rota_prioritaria(self, veiculo_id: int) -> List[str]:
-        """Implementa a busca com o algoritmo escolhido dinamicamente."""
+        """Busca a rota prioritária considerando o algoritmo escolhido."""
         veiculo = next(v for v in self.estado["veiculos"] if v["id"] == veiculo_id)
         inicio = veiculo["localizacao"]
-        
-        # Verificar restrições de terreno
-        if 'tipo_terreno' in self.grafo.nodes[inicio]:
-            tipo_terreno = self.grafo.nodes[inicio]['tipo_terreno']
-            if not self.restricao_acesso.pode_acessar(veiculo['tipo'], tipo_terreno):
-                print(f"Veículo {veiculo['id']} não pode aceder ao terreno {tipo_terreno} em {inicio}")
-                return None
 
-        # Ordenar zonas por score de emergência
+        # Filtrar zonas acessíveis e calcular prioridades
         zonas_scores = [
             (zona_id, self.calcular_score_emergencia(zona_id))
-            for zona_id in self.estado["zonas_afetadas"].keys()
-            if self.estado["zonas_afetadas"][zona_id]["janela_tempo"].esta_acessivel()  # Verificar janela de tempo
+            for zona_id in self.estado["zonas_afetadas"]
+            if self.estado["zonas_afetadas"][zona_id]["janela_tempo"].esta_acessivel()
         ]
+        if not zonas_scores:
+            return None  # Nenhuma zona acessível
+
         zonas_scores.sort(key=lambda x: x[1], reverse=True)
-        
-        heuristica = None  # Será calculada apenas quando necessário
-        
+        heuristica = None
+
         for zona_id, score in zonas_scores:
-            if score == 0:  # Zona já suprida
+            if score <= 0:
                 continue
 
             zona = self.estado["zonas_afetadas"][zona_id]
             if not self.verificar_capacidade_veiculo(veiculo, zona):
                 continue
 
-            # Calcular heurística apenas quando necessário
             if self.algoritmo_escolhido in ["Busca Gulosa", "A*"] and not heuristica:
                 heuristica = calcular_heuristica(self.grafo, zona_id)
 
-            # Executar o algoritmo escolhido
             caminho = None
             if self.algoritmo_escolhido == "Busca em Largura":
                 caminho = busca_em_largura(self.grafo, inicio, zona_id)
@@ -181,31 +174,69 @@ class BuscaEmergencia:
 
         return None
 
-    def calcular_score_emergencia(self, zona_id: str) -> float:
-        """Calcula o score de emergência para uma zona."""
-        zona = self.estado["zonas_afetadas"][zona_id]
-        if zona["suprida"]:
-            return 0
 
-        necessidades_total = sum(zona["necessidades"].values())
-        criticidade = zona["janela_tempo"].criticidade  # Criticidade baseada no tempo restante
-        score = (
-            zona["prioridade"] * 2 +  # Peso maior para prioridade
-            (zona["populacao"] / 1000) +  # Normalizado para população
-            (necessidades_total / 300) +  # Normalizado para necessidades
-            (criticidade * 2)  # Peso adicional para a criticidade
+    def planejar_reabastecimento(self, veiculo: Dict) -> List[str]:
+        """Planeja uma rota para o posto de reabastecimento mais próximo."""
+        postos = [
+            node for node, data in self.grafo.nodes(data=True) if data.get('tipo') == 'posto'
+        ]
+        if not postos:
+            print("Erro: Nenhum posto de reabastecimento disponível.")
+            return None
+
+        heuristica = calcular_heuristica(self.grafo, veiculo["localizacao"])
+        melhor_posto = min(
+            postos,
+            key=lambda p: heuristica.get(p, float('inf'))
         )
-        return score
 
+        caminho = busca_a_estrela(self.grafo, veiculo["localizacao"], melhor_posto, heuristica)
+        if caminho:
+            print(f"Rota de reabastecimento planejada: {caminho}")
+        else:
+            print(f"Não foi possível planejar uma rota para o posto {melhor_posto}.")
 
-    def verificar_capacidade_veiculo(self, veiculo: Dict, zona: Dict) -> bool:
-        """Verifica se o veículo tem capacidade para atender às necessidades da zona."""
-        return veiculo["capacidade"] >= sum(zona["necessidades"].values())
+        return caminho
 
     def verificar_autonomia(self, veiculo: Dict, caminho: List[str]) -> bool:
-        """Verifica se o veículo tem autonomia para completar o caminho."""
-        if not caminho or len(caminho) < 2:
+        """Verifica se o veículo tem autonomia suficiente para a rota."""
+        if not caminho:
             return False
-        custo_total = sum(self.grafo[caminho[i]][caminho[i+1]]['custo'] 
-                         for i in range(len(caminho)-1))
+        custo_total = sum(
+            self.grafo[caminho[i]][caminho[i + 1]]['custo']
+            for i in range(len(caminho) - 1)
+        )
         return veiculo["combustivel"] >= custo_total
+
+    def calcular_score_emergencia(self, zona_id: str) -> float:
+        """Calcula o score de emergência para uma zona."""
+        zona = self.estado["zonas_afetadas"].get(zona_id, {})
+        if zona.get("suprida", False):
+            return 0
+
+        necessidades_total = sum(zona.get("necessidades", {}).values())
+
+        # Verificar se janela de tempo está presente, caso contrário criar padrão
+        janela_tempo = zona.get("janela_tempo")
+        if not janela_tempo:
+            janela_tempo = JanelaTempoZona(
+                zona_id=zona_id,
+                inicio=datetime.now(),
+                duracao_horas=24,
+                prioridade=zona.get("prioridade", 1)
+            )
+
+        criticidade = janela_tempo.criticidade  # Criticidade baseada no tempo restante
+
+        score = (
+            zona.get("prioridade", 0) * 2  # Peso maior para prioridade
+            + (zona.get("populacao", 0) / 1000)  # Normalizado para população
+            + (necessidades_total / 300)  # Normalizado para necessidades
+            + (criticidade * 2)  # Peso adicional para a criticidade
+        )
+        return score
+    
+    def verificar_capacidade_veiculo(self, veiculo: Dict, zona: Dict) -> bool:
+        """Verifica se o veículo tem capacidade suficiente para atender às necessidades da zona."""
+        capacidade_necessaria = sum(zona.get("necessidades", {}).values())
+        return veiculo["capacidade"] >= capacidade_necessaria

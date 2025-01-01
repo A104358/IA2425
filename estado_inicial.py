@@ -59,7 +59,14 @@ estado_inicial = {
         "medicamentos_básicos": {"peso": 300, "volume": 200},
         "medicamentos_especializados": {"peso": 150, "volume": 100},
         "kits_primeiros_socorros": {"peso": 200, "volume": 400}
-    }
+    },
+    "postos_reabastecimento": {
+            "Norte": "POSTO_NORTE",
+            "Centro": "POSTO_CENTRO",
+            "Lisboa": "POSTO_LISBOA",
+            "Alentejo": "POSTO_ALENTEJO",
+            "Algarve": "POSTO_ALGARVE"
+        }
 }
 
 def inicializar_zonas_afetadas(grafo: nx.DiGraph):
