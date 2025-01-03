@@ -78,7 +78,6 @@ class PortugalDistributionGraph:
         
         return closest_region
 
-    # Rest of the class methods remain the same
     def gerar_coordenadas_regiao(self, regiao):
         bounds = self.regioes[regiao]
         lat = random.uniform(bounds['min_lat'], bounds['max_lat'])
@@ -102,7 +101,6 @@ class PortugalDistributionGraph:
     def calcular_custo_tempo(self, coord1, coord2):
         dist = self.calcula_distancia(coord1, coord2)
         custo_base = dist * 0.08
-        # 100 km - 1 h -> 1 km - 0.01 h
         tempo_base = dist * 0.01
         custo = custo_base * random.uniform(0.8, 1.2)
         tempo = tempo_base * random.uniform(0.9, 1.3)
@@ -268,10 +266,7 @@ class PortugalDistributionGraph:
                 custo2, tempo2 = self.calcular_custo_tempo(coord_hub, self.grafo.nodes[posto_proximo2]['coordenadas'])
                 self.grafo.add_edge(hub, posto_proximo2, custo=custo2, tempo=tempo2)
                 self.grafo.add_edge(posto_proximo2, hub, custo=custo2, tempo=tempo2)
-                
-                if hub == 'Viseu':
-                    print(hub, posto_proximo1, posto_proximo2)
-            
+
             # Conectar hubs entre si
             for hub1 in hubs_regiao:
                 for hub2 in hubs_regiao:
@@ -339,7 +334,7 @@ class PortugalDistributionGraph:
 def main():
     # Criar e configurar o grafo
     pdg = PortugalDistributionGraph()
-    grafo = pdg.criar_grafo_grande(num_pontos_entrega=500)
+    grafo = pdg.criar_grafo_grande()
     
     # Imprimir estatísticas
     print(f"Estatísticas do Grafo:")

@@ -186,7 +186,7 @@ def calcular_metricas_caminho(grafo, caminho):
     return {
         'custo': round(custo_total, 2),
         'tempo': round(tempo_total, 2),
-        'num_paradas': len(caminho) - 1
+        'num_paragens': len(caminho) - 1
     }
 
 def avaliar_algoritmos(grafo, inicio, objetivo):
@@ -194,13 +194,13 @@ def avaliar_algoritmos(grafo, inicio, objetivo):
     Avalia os algoritmos de busca com melhor tratamento de erros e logging.
     """
     print(f"\n=== Avaliação dos Algoritmos de Busca ===")
-    print(f"Buscando caminho de {inicio} para {objetivo}")
+    print(f"À procura de caminho de {inicio} para {objetivo}")
     
     if inicio not in grafo or objetivo not in grafo:
         print("Erro: nodos de início ou objetivo não encontrados no grafo")
         return None
     
-    print("\nCalculando heurística...")
+    print("\nA calcular a heurística...")
     heuristica = calcular_heuristica(grafo, objetivo)
     
     algoritmos = {
@@ -212,7 +212,7 @@ def avaliar_algoritmos(grafo, inicio, objetivo):
     
     resultados = {}
     for nome, algoritmo in algoritmos.items():
-        print(f"\nExecutando {nome}...")
+        print(f"\n A executar {nome}...")
         try:
             inicio_tempo = time.time()
             caminho = algoritmo(grafo, inicio, objetivo)
@@ -226,14 +226,14 @@ def avaliar_algoritmos(grafo, inicio, objetivo):
                         "custo": metricas['custo'],
                         "tempo_percurso": metricas['tempo'],
                         "tempo_execucao": tempo_execucao,
-                        "num_paradas": metricas['num_paradas']
+                        "num_paragens": metricas['num_paragens']
                     }
                     print(f"Caminho encontrado: {' -> '.join(caminho)}")
                     print(f"Custo: {metricas['custo']:.2f}")
                     print(f"Tempo de percurso: {metricas['tempo']:.2f}")
                     print(f"Tempo de execução: {tempo_execucao:.4f} segundos")
                 else:
-                    print("Erro ao calcular métricas do caminho")
+                    print("Erro ao calcular as métricas do caminho")
                     resultados[nome] = None
             else:
                 print("Não encontrou caminho!")
@@ -243,44 +243,3 @@ def avaliar_algoritmos(grafo, inicio, objetivo):
             resultados[nome] = None
     
     return resultados
-
-
-if __name__ == "__main__":
-    try:
-        print("Criando o grafo...")
-        pdg = PortugalDistributionGraph()
-        grafo = pdg.criar_grafo_grande(num_pontos_entrega=3)
-        
-        print("\nInformações do grafo:")
-        print(f"Número de nós: {grafo.number_of_nodes()}")
-        print(f"Número de arestas: {grafo.number_of_edges()}")
-        
-        plt = pdg.visualizar_grafo(grafo)
-        plt.show()
-        
-        # Exemplo usando a base em Lisboa e um ponto de entrega
-        inicio = 'BASE_LISBOA'
-        # Encontrar um ponto de entrega válido para teste
-        objetivo = [n for n, d in grafo.nodes(data=True) if d['tipo_terreno'] == 'entrega'][2]
-        
-        resultados = avaliar_algoritmos(grafo, inicio, objetivo)
-        
-        print("\n=== Comparação Final ===")
-        algoritmos_validos = {k: v for k, v in resultados.items() if v is not None}
-        
-        if algoritmos_validos:
-            melhor_custo = min(algoritmos_validos.items(), key=lambda x: x[1]['custo'])
-            melhor_tempo = min(algoritmos_validos.items(), key=lambda x: x[1]['tempo_percurso'])
-            
-            print(f"\nMelhor algoritmo por custo: {melhor_custo[0]}")
-            print(f"- Custo: {melhor_custo[1]['custo']:.2f}")
-            print(f"- Caminho: {' -> '.join(melhor_custo[1]['caminho'])}")
-            
-            print(f"\nMelhor algoritmo por tempo de percurso: {melhor_tempo[0]}")
-            print(f"- Tempo: {melhor_tempo[1]['tempo_percurso']:.2f}")
-            print(f"- Caminho: {' -> '.join(melhor_tempo[1]['caminho'])}")
-        else:
-            print("Nenhum algoritmo encontrou um caminho válido.")
-            
-    except Exception as e:
-        print(f"Erro durante a execução: {e}")

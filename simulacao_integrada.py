@@ -584,8 +584,8 @@ class SimulacaoEmergencia:
 
 def main():
     # Configurações da simulação
-    NUM_PONTOS_ENTREGA = 500
-    NUM_CICLOS = 100
+    NUM_PONTOS_ENTREGA = 200
+    NUM_CICLOS = 1
     
     # Criar grafo
     print("Criando o grafo...")
