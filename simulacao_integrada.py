@@ -7,28 +7,31 @@ from busca_emergencia import BuscaEmergencia
 from condicoes_meteorologicas import GestorMeteorologico, CondicaoMeteorologica
 from eventos_dinamicos import GestorEventos
 from limitacoes_geograficas import RestricaoAcesso, TipoTerreno
-from gestao_recursos import RecursosVeiculo, PlaneadorReabastecimento
-from janela_tempo import JanelaTempoZona
+from gestao_recursos import PlaneadorReabastecimento
+from janela_tempo import JanelaTempoZona, PrioridadeZona
 from datetime import datetime, timedelta
 import time
 import random
 from tabulate import tabulate
+import heapq
 
 class SimulacaoEmergencia:
     def __init__(self, grafo: nx.DiGraph):
         self.grafo = grafo
         self.gestor_meteo = GestorMeteorologico(self.grafo)
         self.gestor_eventos = GestorEventos(self.grafo)
-        self.estado = estado_inicial.copy()  # Create a copy of the initial state
-        self.estado["zonas_afetadas"] = inicializar_zonas_afetadas(self.grafo)  # Initialize affected zones
-        self.busca = BuscaEmergencia(self.grafo, self.estado)  # Pass the complete state
+        self.estado = estado_inicial.copy()
+        self.estado["zonas_afetadas"] = inicializar_zonas_afetadas(self.grafo)
+        self.busca = BuscaEmergencia(self.grafo, self.estado)
         self.restricao_acesso = RestricaoAcesso()
         self.planeador_reabastecimento = PlaneadorReabastecimento(self.grafo)
         self.estatisticas = self._inicializar_estatisticas()
+        self.fila_prioridades = []  # Nova fila de prioridades para zonas críticas
         
         # Initialize components
         self._inicializar_postos_reabastecimento()
         self._inicializar_terrenos()
+        self._atualizar_fila_prioridades()  # Nova função para inicializar a fila
 
     def _inicializar_estatisticas(self) -> Dict:
         """Inicializa o dicionário de estatísticas com valores zerados."""
@@ -115,6 +118,27 @@ class SimulacaoEmergencia:
             'distancia_media_reabastecimento': 0.0,
             'total_distancia_reabastecimento': 0.0
         }
+    
+    def _atualizar_fila_prioridades(self):
+        """Atualiza a fila de prioridades baseada na criticidade das zonas."""
+        self.fila_prioridades = []
+        for zona_id, zona_info in self.estado["zonas_afetadas"].items():
+            janela = zona_info["janela_tempo"]
+            # Calcula criticidade considerando tempo restante e prioridade
+            criticidade = janela._calcular_criticidade()
+            # Adiciona à fila de prioridades (negativo para fazer heapq funcionar como max-heap)
+            heapq.heappush(self.fila_prioridades, (-criticidade, zona_id))
+
+    def _processar_zonas_criticas(self):
+        """Processa e atualiza o status das zonas críticas."""
+        zonas_criticas = []
+        for zona_id, zona_info in self.estado["zonas_afetadas"].items():
+            janela = zona_info["janela_tempo"]
+            if janela.esta_em_periodo_critico():
+                zonas_criticas.append(zona_id)
+                self.estatisticas['janelas_criticas'] += 1
+                print(f"ALERTA: Zona {zona_id} em período crítico! Tempo restante: {janela.tempo_restante():.2f} horas")
+        return zonas_criticas
     
     def _inicializar_terrenos(self):
         """Inicializa e valida os tipos de terreno para todos os nós do grafo."""
@@ -257,16 +281,14 @@ class SimulacaoEmergencia:
         
 
     def simular_entrega(self, veiculo: Dict, rota: List[str], custo_total: float, tempo_total: float) -> bool:
-        """Tenta realizar a entrega de um veículo para o destino."""
+        """Versão atualizada da simulação de entrega considerando criticidade."""
         
         def _simular_viagem(rota: List[str], veiculo: Dict, destino, custo) -> bool:
-            
             combustivel_necessario_viagem = custo * 1.1
             if combustivel_necessario_viagem > veiculo['combustivel']:
                 print(f"Entrega falhou: combustível insuficiente ({veiculo['combustivel']:.2f} < {combustivel_necessario_viagem:.2f})")
                 self.estatisticas['falhas_por_combustivel'] = self.estatisticas.get('falhas_por_combustivel', 0) + 1
                 return False
-            
             
             # Verificar condições meteorológicas
             if self.gestor_meteo.verificar_condicoes_adversas(rota):
@@ -274,7 +296,7 @@ class SimulacaoEmergencia:
                 self.estatisticas['falhas_por_clima'] += 1
                 return False
 
-            # Verificar janela de tempo
+            # Verificar janela de tempo e criticidade
             if destino in self.estado["zonas_afetadas"]:
                 zona = self.estado["zonas_afetadas"][destino]
                 janela = zona["janela_tempo"]
@@ -283,6 +305,12 @@ class SimulacaoEmergencia:
                     print(f"Entrega fora da janela de tempo para zona {destino}")
                     self.estatisticas['entregas_fora_janela'] += 1
                     return False
+                
+                # Registrar se a entrega foi realizada em período crítico
+                if janela.esta_em_periodo_critico():
+                    print(f"Entrega realizada em período crítico para zona {destino}")
+                    self.estatisticas['entregas_em_periodo_critico'] = \
+                        self.estatisticas.get('entregas_em_periodo_critico', 0) + 1
                 
                 self.estatisticas['entregas_dentro_janela'] += 1
                 self.estatisticas['total_tempo_restante'] += janela.tempo_restante()
@@ -316,7 +344,7 @@ class SimulacaoEmergencia:
                 veiculo['combustivel'] = veiculo['autonomia']
             
             return True
-        
+
         if not rota:
             print(f"Entrega falhou: rota inválida")
             return False
@@ -324,7 +352,6 @@ class SimulacaoEmergencia:
         destino = rota[-1]
         if any(posto in destino for posto in ['POSTO_']):
             return False
-        
         
         reabastece_durante_entrega = False
         postos_na_rota = []
@@ -340,19 +367,16 @@ class SimulacaoEmergencia:
                 posto[1] = rota.index(posto[0])
                 idx_anterior = postos_na_rota[i - 1][1] if i > 0 else 0
                 posto[2] = self._calcula_custo(rota, self.grafo, idx_anterior, posto[1])
-
                 partes_entrega.append((rota[idx_anterior:posto[1] + 1], posto[0], posto[2]))
             partes_entrega.append((rota[postos_na_rota[-1][1]:], rota[-1], custo_total))
         else:
             partes_entrega.append((rota, rota[-1], custo_total))
 
         for parte in partes_entrega:
-            
             sucesso = _simular_viagem(parte[0], veiculo, parte[1], parte[2])
 
             if "POSTO_" in parte[1]:
                 self.estatisticas['tentativas_reabastecimento'] += 1
-                
                 if not sucesso:
                     self.estatisticas['reabastecimentos_falhos'] += 1
                 else:
@@ -361,21 +385,21 @@ class SimulacaoEmergencia:
             if not sucesso:
                 self.estatisticas['entregas_falhas'] += 1
                 return False
-        
-        # Atualizar estatísticas
+
+        # Atualizar estatísticas de entrega bem-sucedida
         self.estatisticas['entregas_realizadas'] += 1
         self.estatisticas['sucessos_por_tipo_veiculo'][veiculo['tipo']] = \
             self.estatisticas['sucessos_por_tipo_veiculo'].get(veiculo['tipo'], 0) + 1
-        
-        # Atualizar estatísticas de terreno para o destino
+
+        # Atualizar estatísticas de terreno
         if destino in self.grafo:
             terreno_destino = self.grafo.nodes[destino].get('tipo_terreno', 'urbano')
             self.estatisticas['entregas_por_terreno'][terreno_destino] = \
                 self.estatisticas['entregas_por_terreno'].get(terreno_destino, 0) + 1
-        
-        print(f"Entrega realizada com sucesso usando {veiculo['tipo']} (Combustível restante: {veiculo['combustivel']:.2f})")
 
+        print(f"Entrega realizada com sucesso usando {veiculo['tipo']} (Combustível restante: {veiculo['combustivel']:.2f})")
         return True
+
 
     def _verificar_compatibilidade_terreno(self, tipo_veiculo: str, terreno: str) -> bool:
         """Define compatibilidade entre tipos de veículos e terrenos."""
@@ -387,6 +411,7 @@ class SimulacaoEmergencia:
             'camioneta': {'urbano', 'rural', 'florestal'}
         }
         return terreno in compatibilidade.get(tipo_veiculo, set())
+    
     
     def executar_simulacao(self, num_ciclos: int):
         print(f"Iniciando simulação com {num_ciclos} ciclos...\n")
@@ -440,12 +465,13 @@ class SimulacaoEmergencia:
                         continue
 
                 # Buscar próxima rota normal
-                rota = self.busca.busca_rota_prioritaria(veiculo['id'])
+                rota = self.busca.busca_rota_prioritaria(veiculo['id'])  # Removed destino_especifico argument
                 if not rota:
                     print(f"Veículo {veiculo['id']} não encontrou rota válida.")
                     self.estatisticas['rotas_bloqueadas'] += 1
                     continue
 
+                # Rest of the code remains the same...
                 # Calcular custos e impactos
                 impactos = self.gestor_eventos.get_impacto_total(rota)
                 custo_total = self._calcula_custo(rota, self.grafo)
@@ -456,8 +482,6 @@ class SimulacaoEmergencia:
                 if sucesso:
                     self.estatisticas['tempo_total'] += tempo_total
                     print(f"Rota completa: {' -> '.join(rota)}")
-
-            print("\nResumo do ciclo concluído.")
 
         # Calcular métricas finais após todos os ciclos
         self._calcular_metricas_finais()
@@ -584,7 +608,7 @@ class SimulacaoEmergencia:
 
 def main():
     # Configurações da simulação
-    NUM_PONTOS_ENTREGA = 200
+    NUM_PONTOS_ENTREGA = 100
     NUM_CICLOS = 1
     
     # Criar grafo

@@ -59,7 +59,7 @@ class BuscaEmergencia:
         
         print("\n=== Avaliação de Algoritmos ===")
         for nome, funcao in algoritmos.items():
-            print(f"\nTestando {nome}...")
+            print(f"\nA testar {nome}...")
             tempos_execucao = []
             caminhos = []
             
@@ -131,16 +131,49 @@ class BuscaEmergencia:
             print(f"Score final: {melhor_algoritmo[1]:.4f}")
             return melhor_algoritmo[0]
         else:
-            print("Nenhum algoritmo encontrou um caminho válido")
+            print("Nenhum dos algoritmos encontrou um caminho válido")
             return "A*"  # Algoritmo padrão em caso de falha
 
-    def busca_rota_prioritaria(self, veiculo_id: int) -> List[str]:
-        """Busca a rota prioritária considerando proximidade e prioridade da zona."""
+    def busca_rota_prioritaria(self, veiculo_id: int, destino_especifico: str = None) -> List[str]:
+        """
+        Busca a rota prioritária considerando proximidade e prioridade da zona.
+        
+        Args:
+            veiculo_id: ID do veículo
+            destino_especifico: Opcional - ID da zona específica de destino
+        
+        Returns:
+            List[str]: Lista de nós representando a rota, ou None se não encontrar rota válida
+        """
         veiculo = next(v for v in self.estado["veiculos"] if v["id"] == veiculo_id)
         inicio = veiculo["localizacao"]
         
         # Obter coordenadas do veículo
         coord_veiculo = self.grafo.nodes[inicio]['coordenadas']
+        
+        # Se tiver um destino específico, verificar apenas esse destino
+        if destino_especifico:
+            if destino_especifico not in self.estado["zonas_afetadas"]:
+                return None
+                
+            zona_info = self.estado["zonas_afetadas"][destino_especifico]
+            if zona_info.get("suprida", False) or not zona_info["janela_tempo"].esta_acessivel():
+                return None
+                
+            if not self.verificar_capacidade_veiculo(veiculo, zona_info):
+                return None
+                
+            heuristica = calcular_heuristica(self.grafo, destino_especifico)
+            evitar = [e.value for e in self.restricao_acesso.restricoes_veiculo[veiculo["tipo"]]]
+            
+            if self.algoritmo_escolhido == "Busca em Largura":
+                return busca_em_largura(self.grafo, inicio, destino_especifico, evitar=evitar)
+            elif self.algoritmo_escolhido == "Busca em Profundidade":
+                return busca_em_profundidade(self.grafo, inicio, destino_especifico, evitar=evitar)
+            elif self.algoritmo_escolhido == "Busca Gulosa":
+                return busca_gulosa(self.grafo, inicio, destino_especifico, heuristica, evitar=evitar)
+            else:  # A* como padrão
+                return busca_a_estrela(self.grafo, inicio, destino_especifico, heuristica, evitar=evitar)
         
         # Filtrar zonas acessíveis e calcular scores
         zonas_candidatas = []
@@ -205,12 +238,9 @@ class BuscaEmergencia:
             
             if caminho and self.verificar_autonomia(veiculo, caminho):
                 print(f"Veículo {veiculo_id} indo para zona {zona_id} na região {zona['regiao']}")
-                # print(f"Distância: {zona['distancia']:.2f} km, Score: {zona['score']:.2f}")
                 return caminho
         
         return None
-
-
     def planear_reabastecimento(self, veiculo: Dict) -> List[str]:
         """Planea uma rota para o posto de reabastecimento mais próximo."""
         coord_veiculo = self.grafo.nodes[veiculo["localizacao"]]['coordenadas']
@@ -246,16 +276,6 @@ class BuscaEmergencia:
 
         print("Não foi possível encontrar um posto de reabastecimento acessível.")
         return None
-
-    def verificar_autonomia(self, veiculo: Dict, caminho: List[str]) -> bool:
-        """Verifica se o veículo tem autonomia suficiente para a rota."""
-        if not caminho:
-            return False
-        custo_total = sum(
-            self.grafo[caminho[i]][caminho[i + 1]]['custo']
-            for i in range(len(caminho) - 1)
-        )
-        return veiculo["combustivel"] >= custo_total
 
     def verificar_autonomia(self, veiculo: Dict, caminho: List[str]) -> bool:
         """Verifica se o veículo tem autonomia suficiente para a rota."""

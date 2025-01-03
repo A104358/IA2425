@@ -125,11 +125,7 @@ class GestorMeteorologico:
         opcoes = list(probabilidades[condicao_atual].keys())
         pesos = list(probabilidades[condicao_atual].values())
         return random.choices(opcoes, weights=pesos)[0]
-
-    def get_condicao_regiao(self, regiao: str) -> CondicaoMeteorologica:
-        """Retorna a condição meteorológica atual de uma região"""
-        return self.condicoes_por_regiao.get(regiao, CondicaoMeteorologica.NORMAL)
-
+    
     def imprimir_status(self):
         """Imprime o status atual das condições meteorológicas"""
         print("\n=== Status Meteorológico ===")
