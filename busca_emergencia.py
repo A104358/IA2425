@@ -24,7 +24,6 @@ class BuscaEmergencia:
         self.estado["zonas_afetadas"] = inicializar_zonas_afetadas(grafo)
         self.restricao_acesso = RestricaoAcesso()
         self.algoritmo_escolhido = self.escolher_melhor_algoritmo()
-        # Instanciar PortugalDistributionGraph para usar seus métodos
         self.pdg = PortugalDistributionGraph()
     
     def escolher_melhor_algoritmo(self):
