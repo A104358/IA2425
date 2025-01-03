@@ -119,8 +119,8 @@ class PlaneadorReabastecimento:
         autonomia = veiculo['autonomia']
         localizacao = veiculo['localizacao']
         
-        # Ajuste no limite de reabastecimento para 30% da autonomia
-        limite_reabastecimento = autonomia * 0.3
+        # Ajuste no limite de reabastecimento para 60% da autonomia
+        limite_reabastecimento = autonomia * 0.6
 
         if combustivel_atual <= limite_reabastecimento:
             melhor_posto, rota_reabastecimento = self._encontrar_melhor_posto(
