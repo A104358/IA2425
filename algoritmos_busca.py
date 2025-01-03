@@ -78,7 +78,7 @@ def busca_em_profundidade(grafo, inicio, objetivo, evitar: list[str] = []):
             vizinhos = sorted(list(grafo.neighbors(nodo)), reverse=True)
             
             for vizinho in vizinhos:
-                print(nodo, vizinho, grafo.nodes[vizinho].get("tipo_terreno", None), evitar)
+                # print(nodo, vizinho, grafo.nodes[vizinho].get("tipo_terreno", None), evitar)
                 if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False) and grafo.nodes[vizinho].get("tipo_terreno", None) not in evitar:
                     novo_caminho = caminho + [vizinho]
                     if vizinho not in [n for n, _ in fronteira]:
