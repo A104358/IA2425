@@ -5,8 +5,10 @@ from condicoes_meteorologicas import CondicaoMeteorologica, GestorMeteorologico
 from datetime import datetime, timedelta
 from janela_tempo import JanelaTempoZona
 
+
 estado_inicial = {
     "veiculos": [
+        # Base Lisboa
         {
             "id": 1, 
             "tipo": "camião", 
@@ -51,6 +53,90 @@ estado_inicial = {
             "volume_max": 600, 
             "autonomia": 150, 
             "combustivel": 150
+        },
+        # Base Porto
+        {
+            "id": 6, 
+            "tipo": "camião", 
+            "localizacao": "BASE_PORTO", 
+            "capacidade": 500, 
+            "volume_max": 1000, 
+            "autonomia": 300, 
+            "combustivel": 300
+        },
+        {
+            "id": 7, 
+            "tipo": "drone", 
+            "localizacao": "BASE_PORTO", 
+            "capacidade": 10, 
+            "volume_max": 20, 
+            "autonomia": 50, 
+            "combustivel": 50
+        },
+        {
+            "id": 8, 
+            "tipo": "helicóptero", 
+            "localizacao": "BASE_PORTO", 
+            "capacidade": 200, 
+            "volume_max": 500, 
+            "autonomia": 400, 
+            "combustivel": 400
+        },
+        # Base Faro
+        {
+            "id": 9, 
+            "tipo": "camião", 
+            "localizacao": "BASE_FARO", 
+            "capacidade": 500, 
+            "volume_max": 1000, 
+            "autonomia": 300, 
+            "combustivel": 300
+        },
+        {
+            "id": 10, 
+            "tipo": "drone", 
+            "localizacao": "BASE_FARO", 
+            "capacidade": 10, 
+            "volume_max": 20, 
+            "autonomia": 50, 
+            "combustivel": 50
+        },
+        {
+            "id": 11, 
+            "tipo": "barco", 
+            "localizacao": "BASE_FARO", 
+            "capacidade": 800, 
+            "volume_max": 1500, 
+            "autonomia": 200, 
+            "combustivel": 200
+        },
+        # Base Coimbra
+        {
+            "id": 12, 
+            "tipo": "camião", 
+            "localizacao": "BASE_COIMBRA", 
+            "capacidade": 500, 
+            "volume_max": 1000, 
+            "autonomia": 300, 
+            "combustivel": 300
+        },
+        {
+            "id": 13, 
+            "tipo": "camioneta", 
+            "localizacao": "BASE_COIMBRA", 
+            "capacidade": 300, 
+            "volume_max": 600, 
+            "autonomia": 150, 
+            "combustivel": 150
+        },
+        {
+            "id": 14, 
+            "tipo": "drone", 
+            "localizacao": "BASE_COIMBRA", 
+            "capacidade": 10, 
+            "volume_max": 20, 
+            "autonomia": 50, 
+            "combustivel": 50
         }
     ],
     "suprimentos": {
@@ -66,7 +152,7 @@ estado_inicial = {
             "Lisboa": "POSTO_LISBOA",
             "Alentejo": "POSTO_ALENTEJO",
             "Algarve": "POSTO_ALGARVE"
-        }
+    }
 }
 
 def inicializar_zonas_afetadas(grafo: nx.DiGraph):

@@ -14,15 +14,18 @@ from limitacoes_geograficas import TipoTerreno, RestricaoAcesso
 from janela_tempo import JanelaTempoZona
 import time
 from datetime import datetime, timedelta
+import math
 
 
 class BuscaEmergencia:
     def __init__(self, grafo: nx.DiGraph, estado_inicial: Dict):
         self.grafo = grafo
-        self.estado = estado_inicial.copy()
+        self.estado = estado_inicial
         self.estado["zonas_afetadas"] = inicializar_zonas_afetadas(grafo)
         self.restricao_acesso = RestricaoAcesso()
         self.algoritmo_escolhido = self.escolher_melhor_algoritmo()
+        # Instanciar PortugalDistributionGraph para usar seus métodos
+        self.pdg = PortugalDistributionGraph()
     
     def escolher_melhor_algoritmo(self):
         """
@@ -132,33 +135,60 @@ class BuscaEmergencia:
             return "A*"  # Algoritmo padrão em caso de falha
 
     def busca_rota_prioritaria(self, veiculo_id: int) -> List[str]:
-        """Busca a rota prioritária considerando o algoritmo escolhido."""
+        """Busca a rota prioritária considerando proximidade e prioridade da zona."""
         veiculo = next(v for v in self.estado["veiculos"] if v["id"] == veiculo_id)
         inicio = veiculo["localizacao"]
-
-        # Filtrar zonas acessíveis e calcular prioridades
-        zonas_scores = [
-            (zona_id, self.calcular_score_emergencia(zona_id))
-            for zona_id in self.estado["zonas_afetadas"]
-            if self.estado["zonas_afetadas"][zona_id]["janela_tempo"].esta_acessivel()
-        ]
-        if not zonas_scores:
-            return None  # Nenhuma zona acessível
-
-        zonas_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Obter coordenadas do veículo
+        coord_veiculo = self.grafo.nodes[inicio]['coordenadas']
+        
+        # Filtrar zonas acessíveis e calcular scores
+        zonas_candidatas = []
+        for zona_id, zona_info in self.estado["zonas_afetadas"].items():
+            if not zona_info["janela_tempo"].esta_acessivel() or zona_info.get("suprida", False):
+                continue
+                
+            if not self.verificar_capacidade_veiculo(veiculo, zona_info):
+                continue
+                
+            # Usar o método calcula_distancia do PDG em vez de cálculo euclidiano
+            coord_zona = self.grafo.nodes[zona_id]['coordenadas']
+            distancia = self.pdg.calcula_distancia(coord_veiculo, coord_zona)
+            
+            # Normalizar distância (quanto menor a distância, maior o score)
+            max_dist = 300.0  # Ajustado para distâncias reais em km
+            score_distancia = 1 - min(distancia / max_dist, 1.0)
+            
+            # Identificar região da zona para considerações adicionais
+            regiao_zona = self.pdg._determinar_regiao(coord_zona)
+            
+            score_emergencia = self.calcular_score_emergencia(zona_id)
+            # Adicionar peso para zonas na mesma região
+            regiao_veiculo = self.pdg._determinar_regiao(coord_veiculo)
+            bonus_regiao = 0.1 if regiao_zona == regiao_veiculo else 0
+            
+            score_total = (0.5 * score_emergencia) + (0.4 * score_distancia) + (0.1 * bonus_regiao)
+            
+            zonas_candidatas.append({
+                'zona_id': zona_id,
+                'score': score_total,
+                'distancia': distancia,
+                'regiao': regiao_zona
+            })
+        
+        # Ordenar zonas por score total
+        zonas_candidatas.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Cache para heurística
         heuristica = None
-
-        for zona_id, score in zonas_scores:
-            if score <= 0:
-                continue
-
-            zona = self.estado["zonas_afetadas"][zona_id]
-            if not self.verificar_capacidade_veiculo(veiculo, zona):
-                continue
-
+        
+        # Tentar encontrar um caminho válido para cada zona candidata
+        for zona in zonas_candidatas:
+            zona_id = zona['zona_id']
+            
             if self.algoritmo_escolhido in ["Busca Gulosa", "A*"] and not heuristica:
                 heuristica = calcular_heuristica(self.grafo, zona_id)
-
+            
             caminho = None
             if self.algoritmo_escolhido == "Busca em Largura":
                 caminho = busca_em_largura(self.grafo, inicio, zona_id)
@@ -168,15 +198,23 @@ class BuscaEmergencia:
                 caminho = busca_gulosa(self.grafo, inicio, zona_id, heuristica)
             else:  # A* como padrão
                 caminho = busca_a_estrela(self.grafo, inicio, zona_id, heuristica)
-
+            
             if caminho and self.verificar_autonomia(veiculo, caminho):
+                print(f"Veículo {veiculo_id} indo para zona {zona_id} na região {zona['regiao']}")
+                print(f"Distância: {zona['distancia']:.2f} km, Score: {zona['score']:.2f}")
                 return caminho
-
+        
         return None
 
 
-    def planejar_reabastecimento(self, veiculo: Dict) -> List[str]:
-        """Planeja uma rota para o posto de reabastecimento mais próximo."""
+    def planear_reabastecimento(self, veiculo: Dict) -> List[str]:
+        """Planea uma rota para o posto de reabastecimento mais próximo."""
+        coord_veiculo = self.grafo.nodes[veiculo["localizacao"]]['coordenadas']
+        regiao_veiculo = self.pdg._determinar_regiao(coord_veiculo)
+        
+        # Primeiro tentar posto da mesma região
+        posto_regiao = self.estado["postos_reabastecimento"].get(regiao_veiculo)
+        
         postos = [
             node for node, data in self.grafo.nodes(data=True) if data.get('tipo') == 'posto'
         ]
@@ -184,19 +222,36 @@ class BuscaEmergencia:
             print("Erro: Nenhum posto de reabastecimento disponível.")
             return None
 
-        heuristica = calcular_heuristica(self.grafo, veiculo["localizacao"])
-        melhor_posto = min(
-            postos,
-            key=lambda p: heuristica.get(p, float('inf'))
+        # Se houver posto na mesma região, dar prioridade a ele
+        if posto_regiao in postos:
+            postos.remove(posto_regiao)
+            postos.insert(0, posto_regiao)
+
+        # Tentar cada posto, começando pelo da mesma região
+        for posto in postos:
+            coord_posto = self.grafo.nodes[posto]['coordenadas']
+            distancia = self.pdg.calcula_distancia(coord_veiculo, coord_posto)
+            
+            if distancia <= veiculo["combustivel"]:  # Se tiver autonomia para chegar
+                heuristica = calcular_heuristica(self.grafo, posto)
+                caminho = busca_a_estrela(self.grafo, veiculo["localizacao"], posto, heuristica)
+                if caminho:
+                    print(f"Rota de reabastecimento planejada para {posto}")
+                    print(f"Distância até o posto: {distancia:.2f} km")
+                    return caminho
+
+        print("Não foi possível encontrar um posto de reabastecimento acessível.")
+        return None
+
+    def verificar_autonomia(self, veiculo: Dict, caminho: List[str]) -> bool:
+        """Verifica se o veículo tem autonomia suficiente para a rota."""
+        if not caminho:
+            return False
+        custo_total = sum(
+            self.grafo[caminho[i]][caminho[i + 1]]['custo']
+            for i in range(len(caminho) - 1)
         )
-
-        caminho = busca_a_estrela(self.grafo, veiculo["localizacao"], melhor_posto, heuristica)
-        if caminho:
-            print(f"Rota de reabastecimento planejada: {caminho}")
-        else:
-            print(f"Não foi possível planejar uma rota para o posto {melhor_posto}.")
-
-        return caminho
+        return veiculo["combustivel"] >= custo_total
 
     def verificar_autonomia(self, veiculo: Dict, caminho: List[str]) -> bool:
         """Verifica se o veículo tem autonomia suficiente para a rota."""
@@ -216,7 +271,6 @@ class BuscaEmergencia:
 
         necessidades_total = sum(zona.get("necessidades", {}).values())
 
-        # Verificar se janela de tempo está presente, caso contrário criar padrão
         janela_tempo = zona.get("janela_tempo")
         if not janela_tempo:
             janela_tempo = JanelaTempoZona(
@@ -226,13 +280,13 @@ class BuscaEmergencia:
                 prioridade=zona.get("prioridade", 1)
             )
 
-        criticidade = janela_tempo.criticidade  # Criticidade baseada no tempo restante
+        criticidade = janela_tempo.criticidade
 
         score = (
-            zona.get("prioridade", 0) * 2  # Peso maior para prioridade
-            + (zona.get("populacao", 0) / 1000)  # Normalizado para população
-            + (necessidades_total / 300)  # Normalizado para necessidades
-            + (criticidade * 2)  # Peso adicional para a criticidade
+            zona.get("prioridade", 0) * 2
+            + (zona.get("populacao", 0) / 1000)
+            + (necessidades_total / 300)
+            + (criticidade * 2)
         )
         return score
     

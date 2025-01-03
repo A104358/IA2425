@@ -5,6 +5,8 @@ import math
 from eventos_dinamicos import TipoObstaculo
 from condicoes_meteorologicas import CondicaoMeteorologica, GestorMeteorologico
 from limitacoes_geograficas import TipoTerreno
+import haversine as hs   
+from haversine import Unit
 
 class PortugalDistributionGraph:
     def __init__(self):
@@ -25,7 +27,6 @@ class PortugalDistributionGraph:
             'Algarve': ['Faro', 'Portimão', 'Albufeira', 'Lagos', 'Tavira', 'Loulé']
         }
 
-        # Adicionar postos de reabastecimento para cada região
         self.postos_reabastecimento = {
             'Norte': 'POSTO_NORTE',
             'Centro': 'POSTO_CENTRO',
@@ -34,6 +35,50 @@ class PortugalDistributionGraph:
             'Algarve': 'POSTO_ALGARVE'
         }
 
+        self.bases = {
+            'BASE_LISBOA': (38.7223, -9.1393),
+            'BASE_PORTO': (41.1579, -8.6291),
+            'BASE_FARO': (37.0194, -7.9322),
+            'BASE_COIMBRA': (40.2033, -8.4103)
+        }
+
+    def _determinar_regiao(self, coordenadas):
+        """
+        Determina a região de Portugal a que pertencem as coordenadas dadas.
+        
+        Args:
+            coordenadas (tuple): Par de coordenadas (latitude, longitude)
+            
+        Returns:
+            str: Nome da região ou None se não pertencer a nenhuma
+        """
+        lat, lon = coordenadas
+        for regiao, bounds in self.regioes.items():
+            if (bounds['min_lat'] <= lat <= bounds['max_lat'] and 
+                bounds['min_lon'] <= lon <= bounds['max_lon']):
+                return regiao
+                
+        # Se não encontrar uma região exata, determinar a região mais próxima
+        min_dist = float('inf')
+        closest_region = None
+        
+        for regiao, bounds in self.regioes.items():
+            # Calcular o centro da região
+            region_center = (
+                (bounds['min_lat'] + bounds['max_lat']) / 2,
+                (bounds['min_lon'] + bounds['max_lon']) / 2
+            )
+            
+            # Calcular distância até o centro da região
+            dist = self.calcula_distancia(coordenadas, region_center)
+            
+            if dist < min_dist:
+                min_dist = dist
+                closest_region = regiao
+        
+        return closest_region
+
+    # Rest of the class methods remain the same
     def gerar_coordenadas_regiao(self, regiao):
         bounds = self.regioes[regiao]
         lat = random.uniform(bounds['min_lat'], bounds['max_lat'])
@@ -41,20 +86,23 @@ class PortugalDistributionGraph:
         return (lat, lon)
 
     def gerar_coordenadas_posto(self, regiao):
-        """Gera coordenadas para postos de reabastecimento ligeiramente deslocadas"""
         bounds = self.regioes[regiao]
-        # Desloca o posto para a direita da região
         lat = (bounds['min_lat'] + bounds['max_lat']) / 2
-        lon = bounds['max_lon'] + 0.2  # Desloca 0.2 graus para a direita
+        lon = bounds['max_lon'] + 0.2
         return (lat, lon)
 
+    def calcula_distancia(self, coord1, coord2):
+        return hs.haversine(coord1, coord2, unit=Unit.KILOMETERS)
+
     def calcular_custo_tempo(self, coord1, coord2):
-        dist = math.sqrt((coord1[0] - coord2[0])**2 + (coord1[1] - coord2[1])**2)
-        custo_base = dist * 100
-        tempo_base = dist * 60
+        dist = self.calcula_distancia(coord1, coord2)
+        custo_base = dist * 0.08
+        tempo_base = dist * 0.0166
         custo = custo_base * random.uniform(0.8, 1.2)
         tempo = tempo_base * random.uniform(0.9, 1.3)
+        print(f"{coord1 = } {coord2 = } Distância: {dist:.2f} km, Custo: {custo:.2f}, Tempo: {tempo:.2f}")
         return round(custo, 2), round(tempo, 2)
+
 
     def criar_grafo_grande(self, num_pontos_entrega=500):
         # Adicionar base principal em Lisboa
@@ -80,6 +128,14 @@ class PortugalDistributionGraph:
                                   coordenadas=coords,
                                   regiao=regiao,
                                   tipo_terreno=random.choice(list(TipoTerreno)))
+        
+        for base_id, coordenadas in self.bases.items():
+            regiao = self._determinar_regiao(coordenadas)
+            self.grafo.add_node(base_id, 
+                              tipo='base',
+                              coordenadas=coordenadas,
+                              regiao=regiao)
+
 
         # Adicionar pontos de entrega
         for i in range(num_pontos_entrega):
@@ -100,15 +156,22 @@ class PortugalDistributionGraph:
     def _criar_conexoes(self):
         nodes = list(self.grafo.nodes(data=True))
         
-        # Conectar BASE_LISBOA com todos os hubs
+        # Conectar todas as bases com os hubs mais próximos
+        bases = [n for n, d in nodes if d['tipo'] == 'base']
         hubs = [n for n, d in nodes if d['tipo'] == 'hub']
-        for hub in hubs:
-            coord_base = self.grafo.nodes['BASE_LISBOA']['coordenadas']
-            coord_hub = self.grafo.nodes[hub]['coordenadas']
-            custo, tempo = self.calcular_custo_tempo(coord_base, coord_hub)
+        
+        for base in bases:
+            coord_base = self.grafo.nodes[base]['coordenadas']
+            # Conectar com os 3 hubs mais próximos
+            hubs_dist = [(h, self.calcula_distancia(coord_base, self.grafo.nodes[h]['coordenadas']))
+                        for h in hubs]
+            hubs_dist.sort(key=lambda x: x[1])
             
-            self.grafo.add_edge('BASE_LISBOA', hub, custo=custo, tempo=tempo)
-            self.grafo.add_edge(hub, 'BASE_LISBOA', custo=custo, tempo=tempo)
+            for hub, _ in hubs_dist[:3]:
+                coord_hub = self.grafo.nodes[hub]['coordenadas']
+                custo, tempo = self.calcular_custo_tempo(coord_base, coord_hub)
+                self.grafo.add_edge(base, hub, custo=custo, tempo=tempo)
+                self.grafo.add_edge(hub, base, custo=custo, tempo=tempo)
 
         # Conectar hubs da mesma região
         for regiao in self.regioes:

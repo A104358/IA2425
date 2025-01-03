@@ -1,6 +1,6 @@
 from typing import Dict, List, Counter
 import networkx as nx
-from estado_inicial import estado_inicial
+from estado_inicial import estado_inicial, inicializar_zonas_afetadas
 from criar_grafo import PortugalDistributionGraph
 from busca_emergencia import BuscaEmergencia
 from condicoes_meteorologicas import GestorMeteorologico, CondicaoMeteorologica
@@ -18,17 +18,19 @@ class SimulacaoEmergencia:
         self.grafo = grafo
         self.gestor_meteo = GestorMeteorologico(self.grafo)
         self.gestor_eventos = GestorEventos(self.grafo)
-        self.busca = BuscaEmergencia(self.grafo, estado_inicial)
+        self.estado = estado_inicial.copy()  # Create a copy of the initial state
+        self.estado["zonas_afetadas"] = inicializar_zonas_afetadas(self.grafo)  # Initialize affected zones
+        self.busca = BuscaEmergencia(self.grafo, self.estado)  # Pass the complete state
         self.restricao_acesso = RestricaoAcesso()
         self.planeador_reabastecimento = PlaneadorReabastecimento(self.grafo)
         self.estatisticas = self._inicializar_estatisticas()
         self.recursos_veiculos = {}
         
-        # Initialize the state with predefined refueling stations
+        # Initialize components
         self._inicializar_postos_reabastecimento()
         self._inicializar_terrenos()
         self._inicializar_recursos_veiculos()
-    
+
     def _inicializar_estatisticas(self) -> Dict:
         """Inicializa o dicionário de estatísticas com valores zerados."""
         return {
@@ -210,43 +212,40 @@ class SimulacaoEmergencia:
 
     def simular_entrega(self, veiculo: Dict, rota: List[str], custo_total: float, tempo_total: float) -> bool:
         """Tenta realizar a entrega de um veículo para o destino."""
-        # Verificar se é uma rota de reabastecimento
+        if not rota:
+            print(f"Entrega falhou: rota inválida")
+            return False
+
         destino = rota[-1]
         is_reabastecimento = any(posto in destino for posto in ['POSTO_'])
         
-        # Verificar autonomia com margem de segurança
-        combustivel_necessario = custo_total * 1.1  # 10% de margem de segurança
+        # Verificar combustível necessário com margem de segurança
+        combustivel_necessario = custo_total * 1.1
         if combustivel_necessario > veiculo['combustivel']:
             print(f"Entrega falhou: combustível insuficiente ({veiculo['combustivel']:.2f} < {combustivel_necessario:.2f})")
-            self.estatisticas['falhas_por_obstaculo'] += 1
-            if not is_reabastecimento:
-                self.estatisticas['entregas_falhas'] += 1
+            self.estatisticas['falhas_por_combustivel'] = self.estatisticas.get('falhas_por_combustivel', 0) + 1
             return False
 
-        # Verificar condições meteorológicas apenas para entregas normais
+        # Para entregas normais, verificar condições adicionais
         if not is_reabastecimento:
-            condicoes_adversas = self.gestor_meteo.verificar_condicoes_adversas(rota)
-            if condicoes_adversas:
+            # Verificar condições meteorológicas
+            if self.gestor_meteo.verificar_condicoes_adversas(rota):
                 print(f"Entrega falhou: condições meteorológicas adversas")
                 self.estatisticas['falhas_por_clima'] += 1
-                self.estatisticas['entregas_falhas'] += 1
                 return False
 
-            # Verificar janela de tempo apenas para entregas normais
-            zona_id = destino
-            if zona_id in self.busca.estado["zonas_afetadas"]:
-                zona = self.busca.estado["zonas_afetadas"][zona_id]
+            # Verificar janela de tempo
+            if destino in self.estado["zonas_afetadas"]:
+                zona = self.estado["zonas_afetadas"][destino]
                 janela = zona["janela_tempo"]
-                tempo_restante = janela.tempo_restante()
-
-                self.estatisticas['total_tempo_restante'] += tempo_restante
-                if tempo_restante < (janela.duracao * 0.25):
-                    self.estatisticas['janelas_criticas'] += 1
+                
                 if not janela.esta_acessivel():
+                    print(f"Entrega fora da janela de tempo para zona {destino}")
                     self.estatisticas['entregas_fora_janela'] += 1
-                    print(f"Entrega fora da janela de tempo para zona {zona_id}")
                     return False
+                
                 self.estatisticas['entregas_dentro_janela'] += 1
+                self.estatisticas['total_tempo_restante'] += janela.tempo_restante()
 
         # Verificar compatibilidade de terreno e atualizar estatísticas
         for node in rota:
@@ -275,10 +274,11 @@ class SimulacaoEmergencia:
                         self.estatisticas['falhas_por_tipo_veiculo'][veiculo['tipo']] = \
                             self.estatisticas['falhas_por_tipo_veiculo'].get(veiculo['tipo'], 0) + 1
                         return False
-
-        # Atualizar veículo e estatísticas
+                    
+        # Atualizar localização e combustível do veículo
         veiculo['localizacao'] = destino
         veiculo['combustivel'] -= custo_total
+        print(veiculo)
         
         if is_reabastecimento:
             # Realizar reabastecimento
@@ -342,20 +342,19 @@ class SimulacaoEmergencia:
 
             # Processar cada veículo
             for veiculo in self.busca.estado["veiculos"]:
-                print(f"\nPlanejando rota para {veiculo['tipo']} (ID: {veiculo['id']})")
+                print(f"\nPlaneando rota para {veiculo['tipo']} (ID: {veiculo['id']})")
                 
+                necessita_reabastecimento, rota_reabastecimento = (
+                    self.planeador_reabastecimento.calcular_proximo_reabastecimento(
+                        veiculo, [veiculo['localizacao']]
+                    )
+                )
                 # Verificar necessidade de reabastecimento (60% da autonomia)
-                if veiculo['combustivel'] <= veiculo['autonomia'] * 0.6:
+                if necessita_reabastecimento:   
                     self.estatisticas['tentativas_reabastecimento'] += 1
                     print(f"Veículo {veiculo['id']} com combustível baixo: {veiculo['combustivel']:.2f}")
-                    
-                    necessita_reabastecimento, rota_reabastecimento = (
-                        self.planeador_reabastecimento.calcular_proximo_reabastecimento(
-                            veiculo, [veiculo['localizacao']]
-                        )
-                    )
 
-                    if necessita_reabastecimento and rota_reabastecimento:
+                    if rota_reabastecimento:
                         print(f"Rota de reabastecimento encontrada: {rota_reabastecimento}")
                         
                         # Calcular custo total da rota até o posto
@@ -364,8 +363,14 @@ class SimulacaoEmergencia:
                         
                         # Tentar realizar o reabastecimento
                         if self.simular_entrega(veiculo, rota_reabastecimento, custo_total, 0):
+                            self.estatisticas['reabastecimentos_falhos'] += 1
+                            self.estatisticas['reabastecimentos_por_regiao'][veiculo['localizacao']] += 1
                             continue
                         
+                        self.estatisticas['reabastecimentos_falhos'] += 1
+                        print(f"Falha no reabastecimento: não foi possível alcançar o posto")
+                        continue
+                    else:
                         self.estatisticas['reabastecimentos_falhos'] += 1
                         print(f"Falha no reabastecimento: não foi possível alcançar o posto")
                         continue
@@ -386,6 +391,7 @@ class SimulacaoEmergencia:
                     self.grafo[rota[i]][rota[i + 1]]['tempo'] for i in range(len(rota) - 1)
                 ) * max(1.0, impactos['impacto_tempo'] * 0.6)
 
+                print(custo_total, rota)
                 # Executar a entrega
                 sucesso = self.simular_entrega(veiculo, rota, custo_total, tempo_total)
                 if sucesso:
@@ -519,8 +525,8 @@ class SimulacaoEmergencia:
 
 def main():
     # Configurações da simulação
-    NUM_PONTOS_ENTREGA = 100
-    NUM_CICLOS = 50
+    NUM_PONTOS_ENTREGA = 50
+    NUM_CICLOS = 10
     
     # Criar grafo
     print("Criando o grafo...")

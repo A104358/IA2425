@@ -3,10 +3,10 @@ import networkx as nx
 from estado_inicial import estado_inicial
 from criar_grafo import PortugalDistributionGraph
 
+
 def calcular_heuristica(grafo, objetivo):
     """
     Calcula uma heurística baseada no custo mínimo entre os nodos.
-    Adaptada para trabalhar com o novo formato de grafo.
     """
     heuristica = {}
     for nodo in grafo.nodes():
@@ -16,16 +16,16 @@ def calcular_heuristica(grafo, objetivo):
             custo = sum(grafo[caminho[i]][caminho[i+1]]['custo'] 
                        for i in range(len(caminho)-1))
             heuristica[nodo] = custo
-        except nx.NetworkXNoPath:
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
             heuristica[nodo] = float('inf')
     return heuristica
 
 def busca_em_largura(grafo, inicio, objetivo):
     """
-    Busca em largura adaptada para o novo formato de grafo.
-    Considera apenas nodos acessíveis.
+    Implementação corrigida da busca em largura.
     """
     if inicio not in grafo or objetivo not in grafo:
+        print(f"Nodo inicial {inicio} ou objetivo {objetivo} não encontrado no grafo")
         return None
         
     fronteira = [(inicio, [inicio])]
@@ -33,24 +33,29 @@ def busca_em_largura(grafo, inicio, objetivo):
     
     while fronteira:
         nodo, caminho = fronteira.pop(0)
+        
         if nodo == objetivo:
             return caminho
         
-        explorados.add(nodo)
-        # Ordena os vizinhos para garantir consistência
-        vizinhos = sorted(list(grafo.neighbors(nodo)))
-        for vizinho in vizinhos:
-            if vizinho not in explorados and vizinho not in [n for n, _ in fronteira]:
-                novo_caminho = caminho + [vizinho]
-                fronteira.append((vizinho, novo_caminho))
+        if nodo not in explorados:
+            explorados.add(nodo)
+            vizinhos = sorted(list(grafo.neighbors(nodo)))
+            
+            for vizinho in vizinhos:
+                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False):
+                    novo_caminho = caminho + [vizinho]
+                    if vizinho not in [n for n, _ in fronteira]:
+                        fronteira.append((vizinho, novo_caminho))
+    
+    print(f"Não foi encontrado caminho entre {inicio} e {objetivo}")
     return None
 
 def busca_em_profundidade(grafo, inicio, objetivo):
     """
-    Busca em profundidade adaptada para o novo formato de grafo.
-    Considera apenas nodos acessíveis.
+    Implementação corrigida da busca em profundidade.
     """
     if inicio not in grafo or objetivo not in grafo:
+        print(f"Nodo inicial {inicio} ou objetivo {objetivo} não encontrado no grafo")
         return None
         
     fronteira = [(inicio, [inicio])]
@@ -58,47 +63,66 @@ def busca_em_profundidade(grafo, inicio, objetivo):
     
     while fronteira:
         nodo, caminho = fronteira.pop()
+        
         if nodo == objetivo:
             return caminho
-        
-        explorados.add(nodo)
-        # Ordena os vizinhos para garantir consistência
-        vizinhos = sorted(list(grafo.neighbors(nodo)), reverse=True)
-        for vizinho in vizinhos:
-            if vizinho not in explorados and vizinho not in [n for n, _ in fronteira]:
-                novo_caminho = caminho + [vizinho]
-                fronteira.append((vizinho, novo_caminho))
+            
+        if nodo not in explorados:
+            explorados.add(nodo)
+            vizinhos = sorted(list(grafo.neighbors(nodo)), reverse=True)
+            
+            for vizinho in vizinhos:
+                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False):
+                    novo_caminho = caminho + [vizinho]
+                    if vizinho not in [n for n, _ in fronteira]:
+                        fronteira.append((vizinho, novo_caminho))
+    
+    print(f"Não foi encontrado caminho entre {inicio} e {objetivo}")
     return None
 
-def busca_gulosa(grafo, inicio, objetivo, heuristica):
+def busca_gulosa(grafo, inicio, objetivo, heuristica=None):
     """
-    Busca gulosa adaptada para o novo formato de grafo.
-    Usa a heurística baseada em custos reais.
+    Implementação corrigida da busca gulosa.
     """
     if inicio not in grafo or objetivo not in grafo:
+        print(f"Nodo inicial {inicio} ou objetivo {objetivo} não encontrado no grafo")
         return None
+    
+    if heuristica is None:
+        heuristica = calcular_heuristica(grafo, objetivo)
         
     fronteira = [(heuristica[inicio], inicio, [inicio])]
     explorados = set()
     
     while fronteira:
-        _, nodo, caminho = sorted(fronteira, key=lambda x: x[0]).pop(0)
+        _, nodo, caminho = sorted(fronteira, key=lambda x: x[0])[0]
+        fronteira = [(h, n, p) for h, n, p in fronteira if n != nodo]
+        
         if nodo == objetivo:
             return caminho
             
-        explorados.add(nodo)
-        for vizinho in grafo.neighbors(nodo):
-            if vizinho not in explorados and vizinho not in [n for _, n, _ in fronteira]:
-                fronteira.append((heuristica[vizinho], vizinho, caminho + [vizinho]))
+        if nodo not in explorados:
+            explorados.add(nodo)
+            
+            for vizinho in sorted(grafo.neighbors(nodo)):
+                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False):
+                    if vizinho not in [n for _, n, _ in fronteira]:
+                        novo_caminho = caminho + [vizinho]
+                        fronteira.append((heuristica[vizinho], vizinho, novo_caminho))
+    
+    print(f"Não foi encontrado caminho entre {inicio} e {objetivo}")
     return None
 
-def busca_a_estrela(grafo, inicio, objetivo, heuristica):
+def busca_a_estrela(grafo, inicio, objetivo, heuristica=None):
     """
-    A* adaptado para o novo formato de grafo.
-    Usa custos reais das arestas e heurística baseada em distância.
+    Implementação corrigida do A*.
     """
     if inicio not in grafo or objetivo not in grafo:
+        print(f"Nodo inicial {inicio} ou objetivo {objetivo} não encontrado no grafo")
         return None
+    
+    if heuristica is None:
+        heuristica = calcular_heuristica(grafo, objetivo)
         
     open_list = {inicio}
     closed_list = set()
@@ -120,30 +144,31 @@ def busca_a_estrela(grafo, inicio, objetivo, heuristica):
         open_list.remove(n)
         closed_list.add(n)
         
-        for vizinho in sorted(grafo.neighbors(n)):  # Ordena vizinhos para consistência
-            if vizinho in closed_list:
+        for vizinho in sorted(grafo.neighbors(n)):
+            if grafo[n][vizinho].get('bloqueado', False):
                 continue
                 
             tentative_g = g[n] + grafo[n][vizinho]['custo']
             
-            if vizinho not in open_list:
-                open_list.add(vizinho)
-            elif tentative_g >= g.get(vizinho, float('inf')):
+            if vizinho in closed_list and tentative_g >= g.get(vizinho, float('inf')):
                 continue
                 
-            parents[vizinho] = n
-            g[vizinho] = tentative_g
+            if vizinho not in open_list or tentative_g < g.get(vizinho, float('inf')):
+                parents[vizinho] = n
+                g[vizinho] = tentative_g
+                if vizinho not in open_list:
+                    open_list.add(vizinho)
     
+    print(f"Não foi encontrado caminho entre {inicio} e {objetivo}")
     return None
 
 def calcular_metricas_caminho(grafo, caminho):
-    """Calcula métricas do caminho considerando o novo formato de grafo."""
+    """Calcula métricas do caminho."""
     if not caminho or len(caminho) < 2:
         return None
     
     custo_total = 0
     tempo_total = 0
-    distancia_total = 0
     
     for i in range(len(caminho) - 1):
         aresta = grafo[caminho[i]][caminho[i + 1]]
@@ -158,17 +183,16 @@ def calcular_metricas_caminho(grafo, caminho):
 
 def avaliar_algoritmos(grafo, inicio, objetivo):
     """
-    Avalia os algoritmos de busca com o novo formato de grafo.
-    Adaptado para lidar com nodos do tipo correto.
+    Avalia os algoritmos de busca com melhor tratamento de erros e logging.
     """
     print(f"\n=== Avaliação dos Algoritmos de Busca ===")
     print(f"Buscando caminho de {inicio} para {objetivo}")
     
-    # Verifica se os nodos existem e são do tipo correto
     if inicio not in grafo or objetivo not in grafo:
         print("Erro: nodos de início ou objetivo não encontrados no grafo")
         return None
     
+    print("\nCalculando heurística...")
     heuristica = calcular_heuristica(grafo, objetivo)
     
     algoritmos = {
@@ -188,31 +212,36 @@ def avaliar_algoritmos(grafo, inicio, objetivo):
             
             if caminho:
                 metricas = calcular_metricas_caminho(grafo, caminho)
-                resultados[nome] = {
-                    "caminho": caminho,
-                    "custo": metricas['custo'],
-                    "tempo_percurso": metricas['tempo'],
-                    "tempo_execucao": tempo_execucao,
-                    "num_paradas": metricas['num_paradas']
-                }
-                print(f"Caminho encontrado: {' -> '.join(caminho)}")
-                print(f"Custo: {metricas['custo']:.2f}")
-                print(f"Tempo de percurso: {metricas['tempo']:.2f}")
-                print(f"Tempo de execução: {tempo_execucao:.4f} segundos")
+                if metricas:
+                    resultados[nome] = {
+                        "caminho": caminho,
+                        "custo": metricas['custo'],
+                        "tempo_percurso": metricas['tempo'],
+                        "tempo_execucao": tempo_execucao,
+                        "num_paradas": metricas['num_paradas']
+                    }
+                    print(f"Caminho encontrado: {' -> '.join(caminho)}")
+                    print(f"Custo: {metricas['custo']:.2f}")
+                    print(f"Tempo de percurso: {metricas['tempo']:.2f}")
+                    print(f"Tempo de execução: {tempo_execucao:.4f} segundos")
+                else:
+                    print("Erro ao calcular métricas do caminho")
+                    resultados[nome] = None
             else:
                 print("Não encontrou caminho!")
                 resultados[nome] = None
         except Exception as e:
-            print(f"Erro ao executar {nome}: {e}")
+            print(f"Erro ao executar {nome}: {str(e)}")
             resultados[nome] = None
     
     return resultados
+
 
 if __name__ == "__main__":
     try:
         print("Criando o grafo...")
         pdg = PortugalDistributionGraph()
-        grafo = pdg.criar_grafo_grande(num_pontos_entrega=500)
+        grafo = pdg.criar_grafo_grande(num_pontos_entrega=100)
         
         print("\nInformações do grafo:")
         print(f"Número de nós: {grafo.number_of_nodes()}")
@@ -221,7 +250,7 @@ if __name__ == "__main__":
         # Exemplo usando a base em Lisboa e um ponto de entrega
         inicio = 'BASE_LISBOA'
         # Encontrar um ponto de entrega válido para teste
-        objetivo = next(n for n, d in grafo.nodes(data=True) if d['tipo'] == 'entrega')
+        objetivo = [n for n, d in grafo.nodes(data=True) if d['tipo'] == 'entrega'][2]
         
         resultados = avaliar_algoritmos(grafo, inicio, objetivo)
         

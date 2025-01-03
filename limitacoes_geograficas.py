@@ -15,8 +15,8 @@ class RestricaoAcesso:
             "camião": {TipoTerreno.MONTANHOSO, TipoTerreno.FLORESTAL, TipoTerreno.COSTEIRO},
             "camioneta": {TipoTerreno.MONTANHOSO, TipoTerreno.FLORESTAL, TipoTerreno.COSTEIRO},
             "barco": {TipoTerreno.URBANO, TipoTerreno.MONTANHOSO, TipoTerreno.FLORESTAL, TipoTerreno.RURAL},
-            "drone": set(),  # Drones podem acessar todos os terrenos
-            "helicóptero": {TipoTerreno.COSTEIRO}  # Helicópteros não podem acessar terrenos costeiros
+            "drone": set(),  # Drones podem aceder todos os terrenos
+            "helicóptero": {TipoTerreno.COSTEIRO}  # Helicópteros não podem aceder terrenos costeiros
         }
     
     def pode_acessar(self, tipo_veiculo: str, tipo_terreno: TipoTerreno) -> bool:
