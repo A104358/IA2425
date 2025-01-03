@@ -126,12 +126,6 @@ class GestorMeteorologico:
         pesos = list(probabilidades[condicao_atual].values())
         return random.choices(opcoes, weights=pesos)[0]
     
-    def imprimir_status(self):
-        """Imprime o status atual das condições meteorológicas"""
-        print("\n=== Status Meteorológico ===")
-        for regiao, condicao in self.condicoes_por_regiao.items():
-            print(f"Região {regiao}: {condicao.value}")
-    
     def verificar_condicoes_adversas(self, rota: List[str]) -> bool:
         """Verifica se há condições meteorológicas adversas em qualquer ponto da rota."""
         for node in rota:

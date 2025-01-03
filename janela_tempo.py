@@ -16,7 +16,7 @@ class JanelaTempoZona:
         self.fim = inicio + timedelta(hours=duracao_horas)
         self.prioridade = prioridade
         self.penalizacao_atraso = self._calcular_penalizacao_base()
-        self.criticidade = self._calcular_criticidade()  # Novo atributo
+        self.criticidade = self._calcular_criticidade() 
 
     def _calcular_penalizacao_base(self) -> float:
         """Calcula penalização com base na prioridade."""
@@ -35,11 +35,39 @@ class JanelaTempoZona:
         """Calcula a criticidade com base no tempo restante e prioridade."""
         tempo_restante = self.tempo_restante()
         tempo_total = self.duracao
+        
         if tempo_total == 0:
             return 0.0
-        criticidade_base = (tempo_restante / tempo_total) if tempo_restante > 0 else 0.0
-        return criticidade_base * self.prioridade
-
+            
+        # Inverte a lógica: menos tempo = maior criticidade
+        proporcao_tempo = 1 - (tempo_restante / tempo_total)
+        
+        # Aumenta exponencialmente a criticidade quando abaixo de 25%
+        if tempo_restante < (tempo_total * 0.25):
+            proporcao_tempo = proporcao_tempo * 2
+            
+        return min(1.0, proporcao_tempo * self.prioridade)
+        
+    def esta_em_periodo_critico(self) -> bool:
+        """Verifica se a janela está em período crítico (<25% do tempo restante)."""
+        tempo_total = self.duracao
+        tempo_restante = self.tempo_restante()
+        
+        if tempo_restante <= 0:
+            return False  
+        return tempo_restante < (tempo_total * 0.25)
+        
+    def get_fator_urgencia(self) -> float:
+        """Retorna um multiplicador de urgência baseado no estado da janela."""
+        if not self.esta_acessivel():
+            return 0.0
+            
+        if self.esta_em_periodo_critico():
+            proporcao_restante = self.tempo_restante() / (self.duracao * 0.25)
+            return 2.0 + (1 - proporcao_restante)
+            
+        return 1.0
+    
     def esta_acessivel(self) -> bool:
         """Verifica se a janela ainda está aberta."""
         return datetime.now() <= self.fim
@@ -51,8 +79,3 @@ class JanelaTempoZona:
             return 0.0
         return (self.fim - agora).total_seconds() / 3600
 
-    def esta_em_periodo_critico(self) -> bool:
-        """Verifica se a janela está em período crítico (<25% do tempo restante)."""
-        tempo_total = self.duracao
-        tempo_restante = self.tempo_restante()
-        return tempo_restante < (tempo_total * 0.25)

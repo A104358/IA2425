@@ -105,18 +105,9 @@ class SimulacaoEmergencia:
             
             # Métricas de reabastecimento
             'reabastecimentos': 0,
-            'reabastecimentos_por_regiao': Counter({
-                'Norte': 0,
-                'Centro': 0,
-                'Lisboa': 0,
-                'Alentejo': 0,
-                'Algarve': 0
-            }),
             'tentativas_reabastecimento': 0,
-            'reabastecimentos_falhos': 0,
+            'reabastecimentos_falhados': 0,
             'combustivel_total_reabastecido': 0.0,
-            'distancia_media_reabastecimento': 0.0,
-            'total_distancia_reabastecimento': 0.0
         }
     
     def _atualizar_fila_prioridades(self):
@@ -263,12 +254,11 @@ class SimulacaoEmergencia:
         # Realizar reabastecimento
         combustivel_anterior = veiculo['combustivel']
         veiculo['combustivel'] = veiculo['autonomia']  # Reabastecimento completo
-        
+
         regiao = next((reg for reg, posto in self.busca.estado['postos_reabastecimento'].items()
-                    if posto == destino), 'desconhecida')
-        
+                    if posto == destino), 'região desconhecida')
+            
         self.estatisticas['reabastecimentos'] += 1
-        self.estatisticas['reabastecimentos_por_regiao'][regiao] += 1
         combustivel_reabastecido = veiculo['autonomia'] - combustivel_anterior
         self.estatisticas['combustivel_total_reabastecido'] += combustivel_reabastecido
         
@@ -281,10 +271,11 @@ class SimulacaoEmergencia:
         
 
     def simular_entrega(self, veiculo: Dict, rota: List[str], custo_total: float, tempo_total: float) -> bool:
-        """Versão atualizada da simulação de entrega considerando criticidade."""
+        """Tenta realizar a entrega de um veículo para o destino."""
         
         def _simular_viagem(rota: List[str], veiculo: Dict, destino, custo) -> bool:
-            combustivel_necessario_viagem = custo * 1.1
+            # O parâmetro custo agora é usado ao invés de custo_total
+            combustivel_necessario_viagem = custo * 1.1  # Usando o custo passado como parâmetro
             if combustivel_necessario_viagem > veiculo['combustivel']:
                 print(f"Entrega falhou: combustível insuficiente ({veiculo['combustivel']:.2f} < {combustivel_necessario_viagem:.2f})")
                 self.estatisticas['falhas_por_combustivel'] = self.estatisticas.get('falhas_por_combustivel', 0) + 1
@@ -296,7 +287,7 @@ class SimulacaoEmergencia:
                 self.estatisticas['falhas_por_clima'] += 1
                 return False
 
-            # Verificar janela de tempo e criticidade
+            # Verificar janela de tempo
             if destino in self.estado["zonas_afetadas"]:
                 zona = self.estado["zonas_afetadas"][destino]
                 janela = zona["janela_tempo"]
@@ -305,13 +296,7 @@ class SimulacaoEmergencia:
                     print(f"Entrega fora da janela de tempo para zona {destino}")
                     self.estatisticas['entregas_fora_janela'] += 1
                     return False
-                
-                # Registrar se a entrega foi realizada em período crítico
-                if janela.esta_em_periodo_critico():
-                    print(f"Entrega realizada em período crítico para zona {destino}")
-                    self.estatisticas['entregas_em_periodo_critico'] = \
-                        self.estatisticas.get('entregas_em_periodo_critico', 0) + 1
-                
+                    
                 self.estatisticas['entregas_dentro_janela'] += 1
                 self.estatisticas['total_tempo_restante'] += janela.tempo_restante()
 
@@ -323,7 +308,7 @@ class SimulacaoEmergencia:
                         print(f"Entrega falhou: veículo {veiculo['tipo']} incompatível com terreno {terreno} em {node}")
                         self.estatisticas['falhas_por_terreno'] += 1
                         return False
-                    
+                        
             # Verificar eventos dinâmicos
             for i in range(len(rota) - 1):
                 edge = (rota[i], rota[i + 1])
@@ -334,17 +319,17 @@ class SimulacaoEmergencia:
                         self.estatisticas['falhas_por_tipo_veiculo'][veiculo['tipo']] = \
                             self.estatisticas['falhas_por_tipo_veiculo'].get(veiculo['tipo'], 0) + 1
                         return False
-                        
+                            
             # Atualizar localização e combustível do veículo
             veiculo['localizacao'] = destino
             if "POSTO_" not in destino:
-                veiculo['combustivel'] -= custo_total
+                veiculo['combustivel'] -= custo  # Usando o custo passado como parâmetro
             else:
                 self.estatisticas['combustivel_total_reabastecido'] += veiculo['autonomia'] - veiculo['combustivel']
                 veiculo['combustivel'] = veiculo['autonomia']
             
             return True
-
+            
         if not rota:
             print(f"Entrega falhou: rota inválida")
             return False
@@ -378,7 +363,7 @@ class SimulacaoEmergencia:
             if "POSTO_" in parte[1]:
                 self.estatisticas['tentativas_reabastecimento'] += 1
                 if not sucesso:
-                    self.estatisticas['reabastecimentos_falhos'] += 1
+                    self.estatisticas['reabastecimentos_falhados'] += 1
                 else:
                     self.estatisticas['reabastecimentos'] += 1
             
@@ -422,7 +407,6 @@ class SimulacaoEmergencia:
             # Atualizar condições meteorológicas
             if ciclo % 5 == 0:
                 self.gestor_meteo.atualizar_condicoes()
-                self.gestor_meteo.imprimir_status()
 
             # Atualizar eventos dinâmicos
             self.gestor_eventos.gerar_eventos_aleatorios(prob_novo_evento=0.3)
@@ -452,15 +436,14 @@ class SimulacaoEmergencia:
                         
                         # Tentar realizar o reabastecimento
                         if self.simular_reabastecimento(veiculo, rota_reabastecimento, custo_total):
-                            self.estatisticas['reabastecimentos_falhos'] += 1
-                            self.estatisticas['reabastecimentos_por_regiao'][veiculo['localizacao']] += 1
+                            self.estatisticas['reabastecimentos_falhados'] += 1
                             continue
                         
-                        self.estatisticas['reabastecimentos_falhos'] += 1
+                        self.estatisticas['reabastecimentos_falhados'] += 1
                         print(f"Falha no reabastecimento: não foi possível alcançar o posto")
                         continue
                     else:
-                        self.estatisticas['reabastecimentos_falhos'] += 1
+                        self.estatisticas['reabastecimentos_falhados'] += 1
                         print(f"Falha no reabastecimento: não foi possível alcançar o posto")
                         continue
 
@@ -489,7 +472,7 @@ class SimulacaoEmergencia:
         
     def imprimir_estatisticas(self):
 
-        # Seção 1: Estatísticas Gerais
+        # Estatísticas Gerais
         print("\n" + "-"*60)
         print(f"{'MÉTRICAS GERAIS':^60}")
         print("-"*60)
@@ -500,7 +483,7 @@ class SimulacaoEmergencia:
         ]
         print(tabulate(metricas_gerais, tablefmt="simple"))
 
-        # Seção 2: Estatísticas de Janela de Tempo
+        # Estatísticas de Janela de Tempo
         print("\n" + "-"*60)
         print(f"{'MÉTRICAS DE JANELA DE TEMPO':^60}")
         print("-"*60)
@@ -512,10 +495,10 @@ class SimulacaoEmergencia:
         ]
         if self.estatisticas['entregas_dentro_janela'] > 0:
             tempo_medio = self.estatisticas['tempo_medio_restante'] / self.estatisticas['entregas_dentro_janela']
-            metricas_tempo.append(["Tempo Médio Restante (min)", f"{tempo_medio:.2f}"])
+            metricas_tempo.append(["Tempo Médio Restante (horas)", f"{tempo_medio:.2f}"])
         print(tabulate(metricas_tempo, tablefmt="simple"))
 
-        # Seção 3: Análise de Falhas
+        # Estatísticas de Análise de Falhas
         print("\n" + "-"*60)
         print(f"{'ANÁLISE DE FALHAS':^60}")
         print("-"*60)
@@ -527,7 +510,7 @@ class SimulacaoEmergencia:
         ]
         print(tabulate(metricas_falhas, tablefmt="simple"))
 
-        # Seção 4: Distribuição de Terrenos 
+        # Estatísticas de Distribuição de Terrenos 
     
         print("\n" + "-" * 60)
         print(f"{'DISTRIBUIÇÃO POR TIPO DE TERRENO':^60}")
@@ -558,7 +541,7 @@ class SimulacaoEmergencia:
 
         print(tabulate(veiculos_data, headers=["Tipo", "Sucessos", "Falhas", "Taxa Sucesso"], tablefmt="simple"))
 
-        # Seção 6: Impacto por Densidade Populacional
+        # Estatísticas de Impacto por Densidade Populacional
         print("\n" + "-"*60)
         print(f"{'IMPACTO POR DENSIDADE POPULACIONAL':^60}")
         print("-"*60)
@@ -568,7 +551,7 @@ class SimulacaoEmergencia:
         ]
         print(tabulate(densidade_data, tablefmt="simple"))
 
-        # Nova seção: Estatísticas de Reabastecimento
+        # Estatísticas de Reabastecimento
         print("\n" + "-"*60)
         print(f"{'ESTATÍSTICAS DE REABASTECIMENTO':^60}")
         print("-"*60)
@@ -576,21 +559,11 @@ class SimulacaoEmergencia:
         reabastecimento_data = [
             ["Total de Reabastecimentos", self.estatisticas['reabastecimentos']],
             ["Tentativas de Reabastecimento", self.estatisticas['tentativas_reabastecimento']],
-            ["Reabastecimentos Falhados", self.estatisticas['reabastecimentos_falhos']],
+            ["Reabastecimentos Falhados", self.estatisticas['reabastecimentos_falhados']],
             ["Combustível Total Reabastecido", f"{self.estatisticas['combustivel_total_reabastecido']:.2f}"]
         ]
-        
-        if self.estatisticas['reabastecimentos'] > 0:
-            dist_media = (self.estatisticas['total_distancia_reabastecimento'] / 
-                         self.estatisticas['reabastecimentos'])
-            reabastecimento_data.append(["Distância Média até Posto", f"{dist_media:.2f}"])
-
         print(tabulate(reabastecimento_data, tablefmt="simple"))
 
-        print("\nReabastecimentos por Região:")
-        regiao_data = [[regiao, count] for regiao, count in 
-                      self.estatisticas['reabastecimentos_por_regiao'].most_common()]
-        print(tabulate(regiao_data, headers=["Região", "Quantidade"], tablefmt="simple"))
 
         # Métricas Finais
         print("\n" + "="*60)
@@ -608,8 +581,8 @@ class SimulacaoEmergencia:
 
 def main():
     # Configurações da simulação
-    NUM_PONTOS_ENTREGA = 100
-    NUM_CICLOS = 1
+    NUM_PONTOS_ENTREGA = 30
+    NUM_CICLOS = 10
     
     # Criar grafo
     print("Criando o grafo...")

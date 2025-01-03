@@ -318,3 +318,14 @@ class BuscaEmergencia:
         """Verifica se o veículo tem capacidade suficiente para atender às necessidades da zona."""
         capacidade_necessaria = sum(zona.get("necessidades", {}).values())
         return veiculo["capacidade"] >= capacidade_necessaria
+    
+    def calcular_prioridade_zona(self, zona: Dict) -> float:
+        """Calcula a prioridade de uma zona considerando a janela de tempo."""
+        janela = zona["janela_tempo"]
+        prioridade_base = float(zona.get("prioridade", 1.0))
+        
+        if janela.esta_em_periodo_critico():
+            fator_urgencia = janela.get_fator_urgencia()
+            return prioridade_base * fator_urgencia
+            
+        return prioridade_base

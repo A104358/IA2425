@@ -202,22 +202,4 @@ class GestorEventos:
             'impacto_custo': min(impacto_custo, 1.5),
             'impacto_tempo': min(impacto_tempo, 2.0)
         }
-#apagar esta shit 
-    def imprimir_status(self):
-        print("\n=== Status de Obstáculos e Eventos ===")
 
-        if self.obstaculos:
-            print("\nObstáculos ativos:")
-            for node, tipo in self.obstaculos.items():
-                tempo_restante = self.contadores_tempo[node]
-                print(f"- {node}: {tipo.value} (Tempo restante: {tempo_restante}h)")
-        else:
-            print("\nNenhum obstáculo ativo.")
-
-        if self.eventos:
-            print("\nEventos ativos:")
-            for edge, tipo in self.eventos.items():
-                tempo_restante = self.contadores_tempo[edge]
-                print(f"- {edge[0]} -> {edge[1]}: {tipo.value} (Tempo restante: {tempo_restante}h)")
-        else:
-            print("\nNenhum evento ativo.")
