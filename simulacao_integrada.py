@@ -1,3 +1,4 @@
+from turtle import pos
 from typing import Dict, List, Counter
 import networkx as nx
 from estado_inicial import estado_inicial, inicializar_zonas_afetadas
@@ -24,12 +25,10 @@ class SimulacaoEmergencia:
         self.restricao_acesso = RestricaoAcesso()
         self.planeador_reabastecimento = PlaneadorReabastecimento(self.grafo)
         self.estatisticas = self._inicializar_estatisticas()
-        self.recursos_veiculos = {}
         
         # Initialize components
         self._inicializar_postos_reabastecimento()
         self._inicializar_terrenos()
-        self._inicializar_recursos_veiculos()
 
     def _inicializar_estatisticas(self) -> Dict:
         """Inicializa o dicionário de estatísticas com valores zerados."""
@@ -174,24 +173,6 @@ class SimulacaoEmergencia:
                 else:
                     print(f"Aviso: {posto} não encontrado no grafo")
 
-    def _inicializar_recursos_veiculos(self):
-        """Inicializa os recursos para cada veículo baseado em seu tipo."""
-        capacidades = {
-            'camião': (1000, 20),
-            'drone': (10, 2),
-            'helicóptero': (200, 5),
-            'barco': (800, 15),
-            'camioneta': (300, 6)
-        }
-        
-        for veiculo in self.busca.estado["veiculos"]:
-            peso_max, volume_max = capacidades.get(veiculo['tipo'], (100, 2))
-            self.recursos_veiculos[veiculo['id']] = RecursosVeiculo(
-                capacidade_peso=peso_max,
-                capacidade_volume=volume_max,
-                tipo_veiculo=veiculo['tipo']
-            )
-
     def _formatar_cabecalho(self, texto: str) -> None:
         """Função auxiliar para formatar cabeçalhos de seção."""
         print("\n" + "-"*60)
@@ -209,25 +190,84 @@ class SimulacaoEmergencia:
                 self.estatisticas['eficiencia_carga_total'] / 
                 self.estatisticas['entregas_realizadas']
             )
+            
+    def _calcula_custo(self, rota: List, grafo: nx.DiGraph, idx_inicial: int = 0, idx_final: int = -1) -> float:
+        """Calcula o custo total de uma rota."""
+        if idx_final == -1:
+            idx_final = len(rota) - 1
+        impactos = self.gestor_eventos.get_impacto_total(rota)
+        return sum(
+            self.grafo[rota[i]][rota[i + 1]]['custo'] for i in range(idx_inicial, idx_final)
+        ) * max(1.0, impactos['impacto_custo'] * 0.6)
+
+    def _calcula_tempo(self, rota: List, grafo: nx.DiGraph, idx_inicial: int = 0, idx_final: int = -1) -> float:
+        """Calcula o tempo total de uma rota."""
+        if idx_final == -1:
+            idx_final = len(rota) - 1
+        impactos = self.gestor_eventos.get_impacto_total(rota)
+        return sum(
+            self.grafo[rota[i]][rota[i + 1]]['tempo'] for i in range(idx_inicial, idx_final)
+        ) * max(1.0, impactos['impacto_tempo'] * 0.6)
+
+    def simular_reabastecimento(self, veiculo: Dict, rota: List[str], custo_total: float) -> bool:
+        """Tenta realizar um reabastecimento."""
+        
+        if not rota:
+            print(f"Reabastecimento falhou: rota inválida")
+            return False
+        
+        destino = rota[-1]
+        
+        combustivel_necessario_viagem_completa = custo_total * 1.1
+        if combustivel_necessario_viagem_completa > veiculo['combustivel']:
+            print(f"Reabastecimento falhou: combustível insuficiente ({veiculo['combustivel']:.2f} < {combustivel_necessario_viagem_completa:.2f})")
+            self.estatisticas['falhas_por_combustivel'] = self.estatisticas.get('falhas_por_combustivel', 0) + 1
+            return False
+        
+        # Verificar compatibilidade de terreno e atualizar estatísticas
+        for node in rota:
+            if node in self.grafo and not any(posto in node for posto in ['POSTO_', 'BASE_']):
+                terreno = self.grafo.nodes[node].get('tipo_terreno', 'urbano')
+                if not self._verificar_compatibilidade_terreno(veiculo['tipo'], terreno):
+                    print(f"Entrega falhou: veículo {veiculo['tipo']} incompatível com terreno {terreno} em {node}")
+                    self.estatisticas['falhas_por_terreno'] += 1
+                    return False
+
+        # Atualizar localização e combustível do veículo
+        veiculo['localizacao'] = destino
+        
+        # Realizar reabastecimento
+        combustivel_anterior = veiculo['combustivel']
+        veiculo['combustivel'] = veiculo['autonomia']  # Reabastecimento completo
+        
+        regiao = next((reg for reg, posto in self.busca.estado['postos_reabastecimento'].items()
+                    if posto == destino), 'desconhecida')
+        
+        self.estatisticas['reabastecimentos'] += 1
+        self.estatisticas['reabastecimentos_por_regiao'][regiao] += 1
+        combustivel_reabastecido = veiculo['autonomia'] - combustivel_anterior
+        self.estatisticas['combustivel_total_reabastecido'] += combustivel_reabastecido
+        
+        print(f"Reabastecimento realizado com sucesso em {regiao}")
+        print(f"- Combustível anterior: {combustivel_anterior:.2f}")
+        print(f"- Combustível atual: {veiculo['combustivel']:.2f}")
+        print(f"- Quantidade reabastecida: {combustivel_reabastecido:.2f}")
+        
+        return True
+        
 
     def simular_entrega(self, veiculo: Dict, rota: List[str], custo_total: float, tempo_total: float) -> bool:
         """Tenta realizar a entrega de um veículo para o destino."""
-        if not rota:
-            print(f"Entrega falhou: rota inválida")
-            return False
-
-        destino = rota[-1]
-        is_reabastecimento = any(posto in destino for posto in ['POSTO_'])
         
-        # Verificar combustível necessário com margem de segurança
-        combustivel_necessario = custo_total * 1.1
-        if combustivel_necessario > veiculo['combustivel']:
-            print(f"Entrega falhou: combustível insuficiente ({veiculo['combustivel']:.2f} < {combustivel_necessario:.2f})")
-            self.estatisticas['falhas_por_combustivel'] = self.estatisticas.get('falhas_por_combustivel', 0) + 1
-            return False
-
-        # Para entregas normais, verificar condições adicionais
-        if not is_reabastecimento:
+        def _simular_viagem(rota: List[str], veiculo: Dict, destino, custo) -> bool:
+            
+            combustivel_necessario_viagem = custo * 1.1
+            if combustivel_necessario_viagem > veiculo['combustivel']:
+                print(f"Entrega falhou: combustível insuficiente ({veiculo['combustivel']:.2f} < {combustivel_necessario_viagem:.2f})")
+                self.estatisticas['falhas_por_combustivel'] = self.estatisticas.get('falhas_por_combustivel', 0) + 1
+                return False
+            
+            
             # Verificar condições meteorológicas
             if self.gestor_meteo.verificar_condicoes_adversas(rota):
                 print(f"Entrega falhou: condições meteorológicas adversas")
@@ -247,69 +287,93 @@ class SimulacaoEmergencia:
                 self.estatisticas['entregas_dentro_janela'] += 1
                 self.estatisticas['total_tempo_restante'] += janela.tempo_restante()
 
-        # Verificar compatibilidade de terreno e atualizar estatísticas
-        for node in rota:
-            if node in self.grafo and not any(posto in node for posto in ['POSTO_', 'BASE_']):
-                terreno = self.grafo.nodes[node].get('tipo_terreno', 'urbano')
-                if not self._verificar_compatibilidade_terreno(veiculo['tipo'], terreno):
-                    print(f"Entrega falhou: veículo {veiculo['tipo']} incompatível com terreno {terreno} em {node}")
-                    self.estatisticas['falhas_por_terreno'] += 1
-                    if not is_reabastecimento:
-                        self.estatisticas['entregas_falhas'] += 1
-                    return False
-
-                # Atualizar estatísticas de terreno para entregas normais
-                if not is_reabastecimento:
-                    self.estatisticas['acessos_por_terreno'][terreno] = \
-                        self.estatisticas['acessos_por_terreno'].get(terreno, 0) + 1
-
-        # Verificar eventos dinâmicos apenas para entregas normais
-        if not is_reabastecimento:
+            # Verificar compatibilidade de terreno e atualizar estatísticas
+            for node in rota:
+                if node in self.grafo and not any(posto in node for posto in ['POSTO_', 'BASE_']):
+                    terreno = self.grafo.nodes[node].get('tipo_terreno', 'urbano')
+                    if not self._verificar_compatibilidade_terreno(veiculo['tipo'], terreno):
+                        print(f"Entrega falhou: veículo {veiculo['tipo']} incompatível com terreno {terreno} em {node}")
+                        self.estatisticas['falhas_por_terreno'] += 1
+                        return False
+                    
+            # Verificar eventos dinâmicos
             for i in range(len(rota) - 1):
                 edge = (rota[i], rota[i + 1])
                 if edge in self.gestor_eventos.eventos:
-                    if random.random() < 0.25:  # 25% de chance de falha por evento
+                    if random.random() < 0.1:  # 10% de chance de falha por evento
                         print(f"Entrega falhou devido a um evento dinâmico em {edge}")
                         self.estatisticas['falhas_por_evento'] += 1
                         self.estatisticas['falhas_por_tipo_veiculo'][veiculo['tipo']] = \
                             self.estatisticas['falhas_por_tipo_veiculo'].get(veiculo['tipo'], 0) + 1
                         return False
-                    
-        # Atualizar localização e combustível do veículo
-        veiculo['localizacao'] = destino
-        veiculo['combustivel'] -= custo_total
-        print(veiculo)
+                        
+            # Atualizar localização e combustível do veículo
+            veiculo['localizacao'] = destino
+            if "POSTO_" not in destino:
+                veiculo['combustivel'] -= custo_total
+            else:
+                self.estatisticas['combustivel_total_reabastecido'] += veiculo['autonomia'] - veiculo['combustivel']
+                veiculo['combustivel'] = veiculo['autonomia']
+            
+            return True
         
-        if is_reabastecimento:
-            # Realizar reabastecimento
-            combustivel_anterior = veiculo['combustivel']
-            veiculo['combustivel'] = veiculo['autonomia']  # Reabastecimento completo
-            
-            regiao = next((reg for reg, posto in self.busca.estado['postos_reabastecimento'].items()
-                        if posto == destino), 'desconhecida')
-            
-            self.estatisticas['reabastecimentos'] += 1
-            self.estatisticas['reabastecimentos_por_regiao'][regiao] += 1
-            combustivel_reabastecido = veiculo['autonomia'] - combustivel_anterior
-            self.estatisticas['combustivel_total_reabastecido'] += combustivel_reabastecido
-            
-            print(f"Reabastecimento realizado com sucesso em {regiao}")
-            print(f"- Combustível anterior: {combustivel_anterior:.2f}")
-            print(f"- Combustível atual: {veiculo['combustivel']:.2f}")
-            print(f"- Quantidade reabastecida: {combustivel_reabastecido:.2f}")
+        if not rota:
+            print(f"Entrega falhou: rota inválida")
+            return False
+
+        destino = rota[-1]
+        if any(posto in destino for posto in ['POSTO_']):
+            return False
+        
+        
+        reabastece_durante_entrega = False
+        postos_na_rota = []
+        for node in rota:
+            if "POSTO_" in node:
+                reabastece_durante_entrega = True
+                postos_na_rota.append([node, 0, 0])
+        
+        partes_entrega = []
+        if reabastece_durante_entrega:
+            for i in range(len(postos_na_rota)):
+                posto = postos_na_rota[i]
+                posto[1] = rota.index(posto[0])
+                idx_anterior = postos_na_rota[i - 1][1] if i > 0 else 0
+                posto[2] = self._calcula_custo(rota, self.grafo, idx_anterior, posto[1])
+
+                partes_entrega.append((rota[idx_anterior:posto[1] + 1], posto[0], posto[2]))
+            partes_entrega.append((rota[postos_na_rota[-1][1]:], rota[-1], custo_total))
         else:
-            # Atualizar estatísticas para entregas normais
-            self.estatisticas['entregas_realizadas'] += 1
-            self.estatisticas['sucessos_por_tipo_veiculo'][veiculo['tipo']] = \
-                self.estatisticas['sucessos_por_tipo_veiculo'].get(veiculo['tipo'], 0) + 1
+            partes_entrega.append((rota, rota[-1], custo_total))
+
+        for parte in partes_entrega:
             
-            # Atualizar estatísticas de terreno para o destino
-            if destino in self.grafo:
-                terreno_destino = self.grafo.nodes[destino].get('tipo_terreno', 'urbano')
-                self.estatisticas['entregas_por_terreno'][terreno_destino] = \
-                    self.estatisticas['entregas_por_terreno'].get(terreno_destino, 0) + 1
+            sucesso = _simular_viagem(parte[0], veiculo, parte[1], parte[2])
+
+            if "POSTO_" in parte[1]:
+                self.estatisticas['tentativas_reabastecimento'] += 1
+                
+                if not sucesso:
+                    self.estatisticas['reabastecimentos_falhos'] += 1
+                else:
+                    self.estatisticas['reabastecimentos'] += 1
             
-            print(f"Entrega realizada com sucesso usando {veiculo['tipo']} (Combustível restante: {veiculo['combustivel']:.2f})")
+            if not sucesso:
+                self.estatisticas['entregas_falhas'] += 1
+                return False
+        
+        # Atualizar estatísticas
+        self.estatisticas['entregas_realizadas'] += 1
+        self.estatisticas['sucessos_por_tipo_veiculo'][veiculo['tipo']] = \
+            self.estatisticas['sucessos_por_tipo_veiculo'].get(veiculo['tipo'], 0) + 1
+        
+        # Atualizar estatísticas de terreno para o destino
+        if destino in self.grafo:
+            terreno_destino = self.grafo.nodes[destino].get('tipo_terreno', 'urbano')
+            self.estatisticas['entregas_por_terreno'][terreno_destino] = \
+                self.estatisticas['entregas_por_terreno'].get(terreno_destino, 0) + 1
+        
+        print(f"Entrega realizada com sucesso usando {veiculo['tipo']} (Combustível restante: {veiculo['combustivel']:.2f})")
 
         return True
 
@@ -317,7 +381,7 @@ class SimulacaoEmergencia:
         """Define compatibilidade entre tipos de veículos e terrenos."""
         compatibilidade = {
             'camião': {'urbano', 'rural'},
-            'drone': {'urbano', 'rural', 'montanhoso', 'florestal'},
+            'drone': {'urbano', 'rural', 'montanhoso', 'florestal', 'costeiro'},
             'helicóptero': {'urbano', 'rural', 'montanhoso', 'florestal'},
             'barco': {'costeiro'},
             'camioneta': {'urbano', 'rural', 'florestal'}
@@ -362,7 +426,7 @@ class SimulacaoEmergencia:
                                         for i in range(len(rota_reabastecimento) - 1))
                         
                         # Tentar realizar o reabastecimento
-                        if self.simular_entrega(veiculo, rota_reabastecimento, custo_total, 0):
+                        if self.simular_reabastecimento(veiculo, rota_reabastecimento, custo_total):
                             self.estatisticas['reabastecimentos_falhos'] += 1
                             self.estatisticas['reabastecimentos_por_regiao'][veiculo['localizacao']] += 1
                             continue
@@ -384,14 +448,9 @@ class SimulacaoEmergencia:
 
                 # Calcular custos e impactos
                 impactos = self.gestor_eventos.get_impacto_total(rota)
-                custo_total = sum(
-                    self.grafo[rota[i]][rota[i + 1]]['custo'] for i in range(len(rota) - 1)
-                ) * max(1.0, impactos['impacto_custo'] * 0.6)
-                tempo_total = sum(
-                    self.grafo[rota[i]][rota[i + 1]]['tempo'] for i in range(len(rota) - 1)
-                ) * max(1.0, impactos['impacto_tempo'] * 0.6)
+                custo_total = self._calcula_custo(rota, self.grafo)
+                tempo_total = self._calcula_tempo(rota, self.grafo)
 
-                print(custo_total, rota)
                 # Executar a entrega
                 sucesso = self.simular_entrega(veiculo, rota, custo_total, tempo_total)
                 if sucesso:
@@ -515,7 +574,7 @@ class SimulacaoEmergencia:
         print("="*60)
         if self.estatisticas['entregas_realizadas'] > 0:
             tempo_medio = self.estatisticas['tempo_total'] / self.estatisticas['entregas_realizadas']
-            print(f"\nTempo Médio por Entrega: {tempo_medio:.2f} minutos")
+            print(f"\nTempo Médio por Entrega: {tempo_medio:.2f} horas")
         
         total_entregas = self.estatisticas['entregas_realizadas'] + self.estatisticas['entregas_falhas']
         if total_entregas > 0:
@@ -525,8 +584,8 @@ class SimulacaoEmergencia:
 
 def main():
     # Configurações da simulação
-    NUM_PONTOS_ENTREGA = 200
-    NUM_CICLOS = 10
+    NUM_PONTOS_ENTREGA = 500
+    NUM_CICLOS = 100
     
     # Criar grafo
     print("Criando o grafo...")

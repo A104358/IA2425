@@ -186,22 +186,26 @@ class BuscaEmergencia:
         for zona in zonas_candidatas:
             zona_id = zona['zona_id']
             
+            if zona_id == inicio:
+                continue
+            
             if self.algoritmo_escolhido in ["Busca Gulosa", "A*"] and not heuristica:
                 heuristica = calcular_heuristica(self.grafo, zona_id)
             
+            evitar = [e.value for e in self.restricao_acesso.restricoes_veiculo[veiculo["tipo"]]]
             caminho = None
             if self.algoritmo_escolhido == "Busca em Largura":
-                caminho = busca_em_largura(self.grafo, inicio, zona_id)
+                caminho = busca_em_largura(self.grafo, inicio, zona_id, evitar=evitar)
             elif self.algoritmo_escolhido == "Busca em Profundidade":
-                caminho = busca_em_profundidade(self.grafo, inicio, zona_id)
+                caminho = busca_em_profundidade(self.grafo, inicio, zona_id, evitar=evitar)
             elif self.algoritmo_escolhido == "Busca Gulosa":
-                caminho = busca_gulosa(self.grafo, inicio, zona_id, heuristica)
+                caminho = busca_gulosa(self.grafo, inicio, zona_id, heuristica, evitar=evitar)
             else:  # A* como padrão
-                caminho = busca_a_estrela(self.grafo, inicio, zona_id, heuristica)
+                caminho = busca_a_estrela(self.grafo, inicio, zona_id, heuristica, evitar=evitar)
             
             if caminho and self.verificar_autonomia(veiculo, caminho):
                 print(f"Veículo {veiculo_id} indo para zona {zona_id} na região {zona['regiao']}")
-                print(f"Distância: {zona['distancia']:.2f} km, Score: {zona['score']:.2f}")
+                # print(f"Distância: {zona['distancia']:.2f} km, Score: {zona['score']:.2f}")
                 return caminho
         
         return None

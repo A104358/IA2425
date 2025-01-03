@@ -22,13 +22,13 @@ class GestorMeteorologico:
                 'bloqueio': 0.0
             },
             CondicaoMeteorologica.CHUVA_LEVE: {
-                'custo': 1.2,
-                'tempo': 1.3,
+                'custo': 1.1,
+                'tempo': 1.1,
                 'bloqueio': 0.05
             },
             CondicaoMeteorologica.CHUVA_FORTE: {
-                'custo': 1.5,
-                'tempo': 1.7,
+                'custo': 1.1,
+                'tempo': 1.3,
                 'bloqueio': 0.15
             },
             CondicaoMeteorologica.NEVOEIRO: {
@@ -37,13 +37,13 @@ class GestorMeteorologico:
                 'bloqueio': 0.1
             },
             CondicaoMeteorologica.TEMPESTADE: {
-                'custo': 2.0,
-                'tempo': 2.5,
+                'custo': 1.7,
+                'tempo': 2,
                 'bloqueio': 0.25
             },
             CondicaoMeteorologica.NEVE: {
                 'custo': 1.8,
-                'tempo': 2.2,
+                'tempo': 1.8,
                 'bloqueio': 0.2
             }
         }

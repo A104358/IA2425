@@ -32,31 +32,31 @@ class GestorEventos:
         self.multiplicadores_obstaculos = {
             TipoObstaculo.INUNDACAO: {
                 'custo': 1.2,    # Reduzido de 1.5 - água aumenta resistência mas não tanto
-                'tempo': 2.5,    # Mantido alto pois requer desvios significativos
+                'tempo': 1.6,    # Mantido alto pois requer desvios significativos
                 'duracao': (72, 240),
                 'prob_remocao': 0.05
             },
             TipoObstaculo.DESLIZAMENTO: {
                 'custo': 1.25,   # Reduzido de 1.6 - terreno irregular aumenta consumo moderadamente
-                'tempo': 2.8,    # Alto impacto no tempo devido a necessidade de rotas alternativas
+                'tempo': 1.9,    # Alto impacto no tempo devido a necessidade de rotas alternativas
                 'duracao': (48, 168),
                 'prob_remocao': 0.03
             },
             TipoObstaculo.QUEDA_ARVORES: {
                 'custo': 1.1,    # Reduzido de 1.2 - impacto menor no consumo
-                'tempo': 1.8,    # Mantido significativo devido ao tempo de desvio
+                'tempo': 1.3,    # Mantido significativo devido ao tempo de desvio
                 'duracao': (24, 72),
                 'prob_remocao': 0.2
             },
             TipoObstaculo.EROSÃO: {
                 'custo': 1.15,   # Reduzido de 1.4 - terreno irregular tem impacto moderado
-                'tempo': 2.0,    # Mantido significativo devido à necessidade de cautela
+                'tempo': 1.6,    # Mantido significativo devido à necessidade de cautela
                 'duracao': (36, 120),
                 'prob_remocao': 0.1
             },
             TipoObstaculo.DESMORONAMENTO: {
                 'custo': 1.3,    # Reduzido de 1.7 - desvios aumentam consumo mas não drasticamente
-                'tempo': 3.0,    # Mantido alto devido a necessidade de rotas alternativas longas
+                'tempo': 2,    # Mantido alto devido a necessidade de rotas alternativas longas
                 'duracao': (72, 240),
                 'prob_remocao': 0.02
             }
@@ -94,6 +94,14 @@ class GestorEventos:
                 'duracao': (48, 120),
                 'prob_remocao': 0.05
             }
+        }
+        
+        self.valores_originais = {
+            (u, v): {
+                'custo': data['custo'],
+                'tempo': data['tempo']
+            }
+            for u, v, data in self.grafo.edges(data=True)
         }
 
         self.contadores_tempo = {}
@@ -158,19 +166,19 @@ class GestorEventos:
             densidade = self.grafo.nodes[node].get('densidade_populacional', 'normal')
             mult_densidade = self.multiplicadores_densidade[densidade]
             for edge in self.grafo.edges(node):
-                self.grafo[edge[0]][edge[1]]['custo'] *= mult_densidade['custo']
-                self.grafo[edge[0]][edge[1]]['tempo'] *= mult_densidade['tempo']
+                self.grafo[edge[0]][edge[1]]['custo'] = self.valores_originais[(edge[0],edge[1])]['custo'] * mult_densidade['custo']
+                self.grafo[edge[0]][edge[1]]['tempo'] = self.valores_originais[(edge[0],edge[1])]['tempo'] * mult_densidade['tempo']
 
         for node, tipo in self.obstaculos.items():
             mult = self.multiplicadores_obstaculos[tipo]
             for edge in self.grafo.edges(node):
-                self.grafo[edge[0]][edge[1]]['custo'] *= mult['custo']
-                self.grafo[edge[0]][edge[1]]['tempo'] *= mult['tempo']
+                self.grafo[edge[0]][edge[1]]['custo'] = self.valores_originais[(edge[0],edge[1])]['custo'] * mult['custo']
+                self.grafo[edge[0]][edge[1]]['tempo'] = self.valores_originais[(edge[0],edge[1])]['tempo'] * mult['tempo']
 
         for edge, tipo in self.eventos.items():
             mult = self.multiplicadores_eventos[tipo]
-            self.grafo[edge[0]][edge[1]]['custo'] *= mult['custo']
-            self.grafo[edge[0]][edge[1]]['tempo'] *= mult['tempo']
+            self.grafo[edge[0]][edge[1]]['custo'] = self.valores_originais[(edge[0],edge[1])]['custo'] * mult['custo']
+            self.grafo[edge[0]][edge[1]]['tempo'] = self.valores_originais[(edge[0],edge[1])]['tempo'] * mult['tempo']
 
     def get_impacto_total(self, caminho: List[str]) -> Dict[str, float]:
         """Calcula o impacto total de eventos dinâmicos ao longo de um caminho."""
@@ -196,8 +204,8 @@ class GestorEventos:
                 impacto_tempo *= mult['tempo']
 
         return {
-            'impacto_custo': impacto_custo,
-            'impacto_tempo': impacto_tempo
+            'impacto_custo': min(impacto_custo, 1.5),
+            'impacto_tempo': min(impacto_tempo, 2.0)
         }
 
     def imprimir_status(self):

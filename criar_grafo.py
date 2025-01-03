@@ -28,18 +28,18 @@ class PortugalDistributionGraph:
         }
 
         self.postos_reabastecimento = {
-            'Norte': 'POSTO_NORTE',
-            'Centro': 'POSTO_CENTRO',
-            'Lisboa': 'POSTO_LISBOA',
-            'Alentejo': 'POSTO_ALENTEJO',
-            'Algarve': 'POSTO_ALGARVE'
+            'Norte': [f'POSTO_NORTE_{i}' for i in range(1, 4)],
+            'Centro': [f'POSTO_CENTRO_{i}' for i in range(1, 4)],
+            'Lisboa': [f'POSTO_LISBOA_{i}' for i in range(1, 4)],
+            'Alentejo': [f'POSTO_ALENTEJO_{i}' for i in range(1, 4)],
+            'Algarve': [f'POSTO_ALGARVE_{i}' for i in range(1, 4)]
         }
 
         self.bases = {
             'BASE_LISBOA': (38.7223, -9.1393),
-            'BASE_PORTO': (41.1579, -8.6291),
+            'BASE_PORTO': (41.1579, -8.0291),
             'BASE_FARO': (37.0194, -7.9322),
-            'BASE_COIMBRA': (40.2033, -8.4103)
+            'BASE_COIMBRA': (40.2033, -7.2103)
         }
 
     def _determinar_regiao(self, coordenadas):
@@ -85,10 +85,15 @@ class PortugalDistributionGraph:
         lon = random.uniform(bounds['min_lon'], bounds['max_lon'])
         return (lat, lon)
 
-    def gerar_coordenadas_posto(self, regiao):
+    def gerar_coordenadas_posto(self, regiao, id):
         bounds = self.regioes[regiao]
-        lat = (bounds['min_lat'] + bounds['max_lat']) / 2
-        lon = bounds['max_lon'] + 0.2
+        lat = max(bounds['min_lat'], min((bounds['min_lat'] + bounds['max_lat']) / 2 + random.uniform(-0.5, 0.5), bounds['max_lat']))
+        
+        lon = bounds['min_lon'] + 0.1 + random.uniform(-0.1, 0.1)
+        if id == 2:
+            lon = bounds['max_lon'] - 0.1 + random.uniform(-0.1, 0.1)
+        elif id == 3:
+            lon = (bounds['min_lon'] + bounds['max_lon']) / 2 + random.uniform(-0.1, 0.1)
         return (lat, lon)
 
     def calcula_distancia(self, coord1, coord2):
@@ -97,27 +102,31 @@ class PortugalDistributionGraph:
     def calcular_custo_tempo(self, coord1, coord2):
         dist = self.calcula_distancia(coord1, coord2)
         custo_base = dist * 0.08
-        tempo_base = dist * 0.0166
+        # 100 km - 1 h -> 1 km - 0.01 h
+        tempo_base = dist * 0.01
         custo = custo_base * random.uniform(0.8, 1.2)
         tempo = tempo_base * random.uniform(0.9, 1.3)
-        print(f"{coord1 = } {coord2 = } Distância: {dist:.2f} km, Custo: {custo:.2f}, Tempo: {tempo:.2f}")
-        return round(custo, 2), round(tempo, 2)
+        return round(custo, 2), round(tempo, 3)
 
 
     def criar_grafo_grande(self, num_pontos_entrega=500):
-        # Adicionar base principal em Lisboa
-        self.grafo.add_node('BASE_LISBOA', 
-                           tipo='base',
-                           coordenadas=(38.7223, -9.1393),
-                           regiao='Lisboa')
+
+        for base_id, coordenadas in self.bases.items():
+            regiao = self._determinar_regiao(coordenadas)
+            self.grafo.add_node(base_id, 
+                              tipo='base',
+                              coordenadas=coordenadas,
+                              regiao=regiao)
 
         # Adicionar postos de reabastecimento
-        for regiao, posto_id in self.postos_reabastecimento.items():
-            coords = self.gerar_coordenadas_posto(regiao)
-            self.grafo.add_node(posto_id,
-                              tipo='posto',
-                              coordenadas=coords,
-                              regiao=regiao)
+        for regiao, postos in self.postos_reabastecimento.items():
+            
+            for posto in postos:
+                coords = self.gerar_coordenadas_posto(regiao, int(posto.split('_')[-1]))
+                self.grafo.add_node(posto,
+                                  tipo='posto',
+                                  coordenadas=coords,
+                                  regiao=regiao)
 
         # Adicionar principais cidades como hubs
         for regiao, cidades in self.cidades_principais.items():
@@ -128,14 +137,6 @@ class PortugalDistributionGraph:
                                   coordenadas=coords,
                                   regiao=regiao,
                                   tipo_terreno=random.choice(list(TipoTerreno)))
-        
-        for base_id, coordenadas in self.bases.items():
-            regiao = self._determinar_regiao(coordenadas)
-            self.grafo.add_node(base_id, 
-                              tipo='base',
-                              coordenadas=coordenadas,
-                              regiao=regiao)
-
 
         # Adicionar pontos de entrega
         for i in range(num_pontos_entrega):
@@ -156,8 +157,48 @@ class PortugalDistributionGraph:
     def _criar_conexoes(self):
         nodes = list(self.grafo.nodes(data=True))
         
-        # Conectar todas as bases com os hubs mais próximos
+        # Conectar bases com bases e postos de abastecimento mais próximas
         bases = [n for n, d in nodes if d['tipo'] == 'base']
+        
+        for base1 in bases:
+            coord_base1 = self.grafo.nodes[base1]['coordenadas']
+            # Conectar com a base mais próxima
+            bases_dist = [(b, self.calcula_distancia(coord_base1, self.grafo.nodes[b]['coordenadas']))
+                        for b in bases if b != base1]
+            bases_dist.sort(key=lambda x: x[1])
+            
+            base_mais_proxima, dist_proxima = bases_dist[0]
+            custo, tempo = self.calcular_custo_tempo(coord_base1, self.grafo.nodes[base_mais_proxima]['coordenadas'])
+            self.grafo.add_edge(base1, base_mais_proxima, custo=custo, tempo=tempo)
+            self.grafo.add_edge(base_mais_proxima, base1, custo=custo, tempo=tempo)
+            
+            # Conectar com o posto de abastecimento mais próximo
+            postos = [n for n, d in nodes if d['tipo'] == 'posto']
+            postos_dist = [(p, self.calcula_distancia(coord_base1, self.grafo.nodes[p]['coordenadas']))
+                        for p in postos]
+            postos_dist.sort(key=lambda x: x[1])
+            
+            for posto, dist in postos_dist[:2]:
+                custo, tempo = self.calcular_custo_tempo(coord_base1, self.grafo.nodes[posto]['coordenadas'])
+                self.grafo.add_edge(base1, posto, custo=custo, tempo=tempo)
+                self.grafo.add_edge(posto, base1, custo=custo, tempo=tempo)
+                
+        # Conectar todas as cidades com as bases mais próximas
+        cidades = [n for n, d in nodes if d['tipo'] == 'hub']
+
+        for cidade in cidades:
+            coord_cidade = self.grafo.nodes[cidade]['coordenadas']
+            # Conectar com a base mais próxima
+            bases_dist = [(b, self.calcula_distancia(coord_cidade, self.grafo.nodes[b]['coordenadas']))
+                        for b in bases]
+            bases_dist.sort(key=lambda x: x[1])
+            
+            base_mais_proxima, dist_proxima = bases_dist[0]
+            custo, tempo = self.calcular_custo_tempo(coord_cidade, self.grafo.nodes[base_mais_proxima]['coordenadas'])
+            self.grafo.add_edge(cidade, base_mais_proxima, custo=custo, tempo=tempo)
+            self.grafo.add_edge(base_mais_proxima, cidade, custo=custo, tempo=tempo)
+        
+        # Conectar todas as bases com os hubs mais próximos
         hubs = [n for n, d in nodes if d['tipo'] == 'hub']
         
         for base in bases:
@@ -173,18 +214,63 @@ class PortugalDistributionGraph:
                 self.grafo.add_edge(base, hub, custo=custo, tempo=tempo)
                 self.grafo.add_edge(hub, base, custo=custo, tempo=tempo)
 
+        # conectar postos da mesma regiao entre si
+        
+        for regiao in self.regioes:
+            postos_regiao = [n for n, d in nodes if d['tipo'] == 'posto' and d['regiao'] == regiao]
+            for posto1 in postos_regiao:
+                for posto2 in postos_regiao:
+                    if posto1 != posto2:
+                        coord1 = self.grafo.nodes[posto1]['coordenadas']
+                        coord2 = self.grafo.nodes[posto2]['coordenadas']
+                        custo, tempo = self.calcular_custo_tempo(coord1, coord2)
+                        self.grafo.add_edge(posto1, posto2, custo=custo, tempo=tempo)
+                                            
+        # Conectar postos ao posto de outra regiao mais proximo
+        postos = [n for n, d in nodes if d['tipo'] == 'posto']
+        for posto in postos:
+            regiao_posto = self.grafo.nodes[posto]['regiao']
+            postos_regiao = [n for n, d in nodes if d['tipo'] == 'posto' and d['regiao'] == regiao_posto]
+            postos_dist = [(p, self.calcula_distancia(self.grafo.nodes[posto]['coordenadas'], self.grafo.nodes[p]['coordenadas']))
+                        for p in postos if p not in postos_regiao]
+            postos_dist.sort(key=lambda x: x[1])
+            
+            posto_proximo, dist_proxima = postos_dist[0]
+            custo, tempo = self.calcular_custo_tempo(self.grafo.nodes[posto]['coordenadas'], self.grafo.nodes[posto_proximo]['coordenadas'])
+            self.grafo.add_edge(posto, posto_proximo, custo=custo, tempo=tempo)
+            self.grafo.add_edge(posto_proximo, posto, custo=custo, tempo=tempo)
+        
         # Conectar hubs da mesma região
         for regiao in self.regioes:
             hubs_regiao = [n for n, d in nodes if d['tipo'] == 'hub' and d['regiao'] == regiao]
-            posto_regiao = self.postos_reabastecimento[regiao]
+            postos_regiao = [n for n, d in nodes if d['tipo'] == 'posto' and d['regiao'] == regiao]
             
-            # Conectar cada hub ao posto de reabastecimento da sua região
             for hub in hubs_regiao:
+                    
+                # Conectar cada hub ao posto de reabastecimento mais proximo na sua região
                 coord_hub = self.grafo.nodes[hub]['coordenadas']
-                coord_posto = self.grafo.nodes[posto_regiao]['coordenadas']
-                custo, tempo = self.calcular_custo_tempo(coord_hub, coord_posto)
-                self.grafo.add_edge(hub, posto_regiao, custo=custo, tempo=tempo)
-                self.grafo.add_edge(posto_regiao, hub, custo=custo, tempo=tempo)
+                postos_dist = [(p, self.calcula_distancia(coord_hub, self.grafo.nodes[p]['coordenadas']))
+                            for p in postos_regiao]
+                postos_dist.sort(key=lambda x: x[1])
+                
+                posto_proximo1, dist_proxima1 = postos_dist[0]
+                custo1, tempo1 = self.calcular_custo_tempo(coord_hub, self.grafo.nodes[posto_proximo1]['coordenadas'])
+                self.grafo.add_edge(hub, posto_proximo1, custo=custo1, tempo=tempo1)
+                self.grafo.add_edge(posto_proximo1, hub, custo=custo1, tempo=tempo1)
+            
+                # Conectar cada hub ao posto de reabastecimento mais proximo
+                coord_hub = self.grafo.nodes[hub]['coordenadas']
+                postos_dist = [(p, self.calcula_distancia(coord_hub, self.grafo.nodes[p]['coordenadas']))
+                            for p in postos if p != posto_proximo1]
+                postos_dist.sort(key=lambda x: x[1])
+                
+                posto_proximo2, dist_proxima2 = postos_dist[0]
+                custo2, tempo2 = self.calcular_custo_tempo(coord_hub, self.grafo.nodes[posto_proximo2]['coordenadas'])
+                self.grafo.add_edge(hub, posto_proximo2, custo=custo2, tempo=tempo2)
+                self.grafo.add_edge(posto_proximo2, hub, custo=custo2, tempo=tempo2)
+                
+                if hub == 'Viseu':
+                    print(hub, posto_proximo1, posto_proximo2)
             
             # Conectar hubs entre si
             for hub1 in hubs_regiao:

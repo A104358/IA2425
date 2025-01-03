@@ -22,7 +22,7 @@ estado_inicial = {
             "id": 2, 
             "tipo": "drone", 
             "localizacao": "BASE_LISBOA", 
-            "capacidade": 10, 
+            "capacidade": 100, 
             "volume_max": 20, 
             "autonomia": 50, 
             "combustivel": 50
@@ -68,7 +68,7 @@ estado_inicial = {
             "id": 7, 
             "tipo": "drone", 
             "localizacao": "BASE_PORTO", 
-            "capacidade": 10, 
+            "capacidade": 100, 
             "volume_max": 20, 
             "autonomia": 50, 
             "combustivel": 50
@@ -96,7 +96,7 @@ estado_inicial = {
             "id": 10, 
             "tipo": "drone", 
             "localizacao": "BASE_FARO", 
-            "capacidade": 10, 
+            "capacidade": 100, 
             "volume_max": 20, 
             "autonomia": 50, 
             "combustivel": 50
@@ -133,7 +133,7 @@ estado_inicial = {
             "id": 14, 
             "tipo": "drone", 
             "localizacao": "BASE_COIMBRA", 
-            "capacidade": 10, 
+            "capacidade": 100, 
             "volume_max": 20, 
             "autonomia": 50, 
             "combustivel": 50
@@ -164,10 +164,10 @@ def inicializar_zonas_afetadas(grafo: nx.DiGraph):
         if data['tipo'] == 'entrega':
             densidade_populacional = data.get('densidade_populacional', 'normal')
             necessidades = {
-                "alimentos": random.randint(50, 150),
-                "água": random.randint(30, 100),
-                "medicamentos_básicos": random.randint(20, 80),
-                "kits_primeiros_socorros": random.randint(10, 50)
+                "alimentos": random.randint(30, 150),
+                "água": random.randint(10, 100),
+                "medicamentos_básicos": random.randint(5, 80),
+                "kits_primeiros_socorros": random.randint(2, 50)
             }
 
             if densidade_populacional == 'alta':

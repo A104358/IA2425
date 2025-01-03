@@ -20,10 +20,11 @@ def calcular_heuristica(grafo, objetivo):
             heuristica[nodo] = float('inf')
     return heuristica
 
-def busca_em_largura(grafo, inicio, objetivo):
+def busca_em_largura(grafo, inicio, objetivo, evitar: list[str] = []):
     """
     Implementação corrigida da busca em largura.
     """
+    
     if inicio not in grafo or objetivo not in grafo:
         print(f"Nodo inicial {inicio} ou objetivo {objetivo} não encontrado no grafo")
         return None
@@ -34,23 +35,28 @@ def busca_em_largura(grafo, inicio, objetivo):
     while fronteira:
         nodo, caminho = fronteira.pop(0)
         
+        pai = None
+        if len(caminho) > 1:
+            pai = caminho[-2]
+        
         if nodo == objetivo:
             return caminho
         
         if nodo not in explorados:
-            explorados.add(nodo)
+            explorados.add((nodo, pai))
             vizinhos = sorted(list(grafo.neighbors(nodo)))
             
             for vizinho in vizinhos:
-                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False):
+                # print(nodo, vizinho, grafo.nodes[vizinho].get("tipo_terreno", None), evitar)
+                if (vizinho, nodo) not in explorados and not grafo[nodo][vizinho].get('bloqueado', False) and grafo.nodes[vizinho].get("tipo_terreno", None) not in evitar:
                     novo_caminho = caminho + [vizinho]
-                    if vizinho not in [n for n, _ in fronteira]:
+                    if vizinho not in caminho:
                         fronteira.append((vizinho, novo_caminho))
     
     print(f"Não foi encontrado caminho entre {inicio} e {objetivo}")
     return None
 
-def busca_em_profundidade(grafo, inicio, objetivo):
+def busca_em_profundidade(grafo, inicio, objetivo, evitar: list[str] = []):
     """
     Implementação corrigida da busca em profundidade.
     """
@@ -72,7 +78,8 @@ def busca_em_profundidade(grafo, inicio, objetivo):
             vizinhos = sorted(list(grafo.neighbors(nodo)), reverse=True)
             
             for vizinho in vizinhos:
-                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False):
+                # print(nodo, vizinho, grafo.nodes[vizinho].get("tipo_terreno", None), evitar)
+                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False) and grafo.nodes[vizinho].get("tipo_terreno", None) not in evitar:
                     novo_caminho = caminho + [vizinho]
                     if vizinho not in [n for n, _ in fronteira]:
                         fronteira.append((vizinho, novo_caminho))
@@ -80,7 +87,7 @@ def busca_em_profundidade(grafo, inicio, objetivo):
     print(f"Não foi encontrado caminho entre {inicio} e {objetivo}")
     return None
 
-def busca_gulosa(grafo, inicio, objetivo, heuristica=None):
+def busca_gulosa(grafo, inicio, objetivo, heuristica=None, evitar: list[str] = []):
     """
     Implementação corrigida da busca gulosa.
     """
@@ -105,7 +112,8 @@ def busca_gulosa(grafo, inicio, objetivo, heuristica=None):
             explorados.add(nodo)
             
             for vizinho in sorted(grafo.neighbors(nodo)):
-                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False):
+                # print(nodo, vizinho, grafo.nodes[vizinho].get("tipo_terreno", None), evitar)
+                if vizinho not in explorados and not grafo[nodo][vizinho].get('bloqueado', False) and grafo.nodes[vizinho].get("tipo_terreno", None) not in evitar:
                     if vizinho not in [n for _, n, _ in fronteira]:
                         novo_caminho = caminho + [vizinho]
                         fronteira.append((heuristica[vizinho], vizinho, novo_caminho))
@@ -113,7 +121,7 @@ def busca_gulosa(grafo, inicio, objetivo, heuristica=None):
     print(f"Não foi encontrado caminho entre {inicio} e {objetivo}")
     return None
 
-def busca_a_estrela(grafo, inicio, objetivo, heuristica=None):
+def busca_a_estrela(grafo, inicio, objetivo, heuristica=None, evitar: list[str] = []):
     """
     Implementação corrigida do A*.
     """
@@ -145,7 +153,7 @@ def busca_a_estrela(grafo, inicio, objetivo, heuristica=None):
         closed_list.add(n)
         
         for vizinho in sorted(grafo.neighbors(n)):
-            if grafo[n][vizinho].get('bloqueado', False):
+            if grafo[n][vizinho].get('bloqueado', False) or grafo.nodes[vizinho].get("tipo_terreno", None) in evitar:
                 continue
                 
             tentative_g = g[n] + grafo[n][vizinho]['custo']
@@ -241,16 +249,19 @@ if __name__ == "__main__":
     try:
         print("Criando o grafo...")
         pdg = PortugalDistributionGraph()
-        grafo = pdg.criar_grafo_grande(num_pontos_entrega=100)
+        grafo = pdg.criar_grafo_grande(num_pontos_entrega=3)
         
         print("\nInformações do grafo:")
         print(f"Número de nós: {grafo.number_of_nodes()}")
         print(f"Número de arestas: {grafo.number_of_edges()}")
         
+        plt = pdg.visualizar_grafo(grafo)
+        plt.show()
+        
         # Exemplo usando a base em Lisboa e um ponto de entrega
         inicio = 'BASE_LISBOA'
         # Encontrar um ponto de entrega válido para teste
-        objetivo = [n for n, d in grafo.nodes(data=True) if d['tipo'] == 'entrega'][2]
+        objetivo = [n for n, d in grafo.nodes(data=True) if d['tipo_terreno'] == 'entrega'][2]
         
         resultados = avaliar_algoritmos(grafo, inicio, objetivo)
         
