@@ -448,13 +448,12 @@ class SimulacaoEmergencia:
                         continue
 
                 # Buscar próxima rota normal
-                rota = self.busca.busca_rota_prioritaria(veiculo['id'])  # Removed destino_especifico argument
+                rota = self.busca.busca_rota_prioritaria(veiculo['id'])
                 if not rota:
                     print(f"Veículo {veiculo['id']} não encontrou rota válida.")
                     self.estatisticas['rotas_bloqueadas'] += 1
                     continue
 
-                # Rest of the code remains the same...
                 # Calcular custos e impactos
                 impactos = self.gestor_eventos.get_impacto_total(rota)
                 custo_total = self._calcula_custo(rota, self.grafo)
