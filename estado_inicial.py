@@ -10,66 +10,140 @@ estado_inicial = {
     "veiculos": [
         # Base Lisboa
         {
-            "id": 1,
-            "tipo": "camião",
-            "localizacao": "BASE_LISBOA",
-            "capacidade": 500,
-            "volume_max": 1000,
-            "autonomia": 300,
+            "id": 1, 
+            "tipo": "camião", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 500, 
+            "volume_max": 1000, 
+            "autonomia": 300, 
             "combustivel": 300
         },
         {
-            "id": 2,
-            "tipo": "drone",
-            "localizacao": "BASE_LISBOA",
-            "capacidade": 100,
-            "volume_max": 20,
-            "autonomia": 50,
+            "id": 2, 
+            "tipo": "drone", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 100, 
+            "volume_max": 20, 
+            "autonomia": 50, 
             "combustivel": 50
+        },
+        {
+            "id": 3, 
+            "tipo": "helicóptero", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 200, 
+            "volume_max": 500, 
+            "autonomia": 400, 
+            "combustivel": 400
+        },
+        {
+            "id": 4, 
+            "tipo": "barco", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 800, 
+            "volume_max": 1500, 
+            "autonomia": 200, 
+            "combustivel": 200
+        },
+        {
+            "id": 5, 
+            "tipo": "camioneta", 
+            "localizacao": "BASE_LISBOA", 
+            "capacidade": 300, 
+            "volume_max": 600, 
+            "autonomia": 150, 
+            "combustivel": 150
         },
         # Base Porto
         {
-            "id": 3,
-            "tipo": "camião",
-            "localizacao": "BASE_PORTO",
-            "capacidade": 500,
-            "volume_max": 1000,
-            "autonomia": 300,
+            "id": 6, 
+            "tipo": "camião", 
+            "localizacao": "BASE_PORTO", 
+            "capacidade": 500, 
+            "volume_max": 1000, 
+            "autonomia": 300, 
             "combustivel": 300
         },
         {
-            "id": 4,
-            "tipo": "helicóptero",
-            "localizacao": "BASE_PORTO",
-            "capacidade": 200,
-            "volume_max": 500,
-            "autonomia": 400,
+            "id": 7, 
+            "tipo": "drone", 
+            "localizacao": "BASE_PORTO", 
+            "capacidade": 100, 
+            "volume_max": 20, 
+            "autonomia": 50, 
+            "combustivel": 50
+        },
+        {
+            "id": 8, 
+            "tipo": "helicóptero", 
+            "localizacao": "BASE_PORTO", 
+            "capacidade": 200, 
+            "volume_max": 500, 
+            "autonomia": 400, 
             "combustivel": 400
         },
         # Base Faro
         {
-            "id": 5,
-            "tipo": "barco",
-            "localizacao": "BASE_FARO",
-            "capacidade": 800,
-            "volume_max": 1500,
-            "autonomia": 200,
-            "combustivel": 200
+            "id": 9, 
+            "tipo": "camião", 
+            "localizacao": "BASE_FARO", 
+            "capacidade": 500, 
+            "volume_max": 1000, 
+            "autonomia": 300, 
+            "combustivel": 300
         },
         {
-            "id": 6,
-            "tipo": "camioneta",
-            "localizacao": "BASE_FARO",
-            "capacidade": 300,
-            "volume_max": 600,
-            "autonomia": 150,
+            "id": 10, 
+            "tipo": "drone", 
+            "localizacao": "BASE_FARO", 
+            "capacidade": 100, 
+            "volume_max": 20, 
+            "autonomia": 50, 
+            "combustivel": 50
+        },
+        {
+            "id": 11, 
+            "tipo": "barco", 
+            "localizacao": "BASE_FARO", 
+            "capacidade": 800, 
+            "volume_max": 1500, 
+            "autonomia": 200, 
+            "combustivel": 200
+        },
+        # Base Coimbra
+        {
+            "id": 12, 
+            "tipo": "camião", 
+            "localizacao": "BASE_COIMBRA", 
+            "capacidade": 500, 
+            "volume_max": 1000, 
+            "autonomia": 300, 
+            "combustivel": 300
+        },
+        {
+            "id": 13, 
+            "tipo": "camioneta", 
+            "localizacao": "BASE_COIMBRA", 
+            "capacidade": 300, 
+            "volume_max": 600, 
+            "autonomia": 150, 
             "combustivel": 150
+        },
+        {
+            "id": 14, 
+            "tipo": "drone", 
+            "localizacao": "BASE_COIMBRA", 
+            "capacidade": 100, 
+            "volume_max": 20, 
+            "autonomia": 50, 
+            "combustivel": 50
         }
     ],
     "suprimentos": {
         "alimentos": {"peso": 1000, "volume": 2000},
         "água": {"peso": 500, "volume": 500},
         "medicamentos_básicos": {"peso": 300, "volume": 200},
+        "medicamentos_especializados": {"peso": 150, "volume": 100},
         "kits_primeiros_socorros": {"peso": 200, "volume": 400}
     },
     "postos_reabastecimento": {
